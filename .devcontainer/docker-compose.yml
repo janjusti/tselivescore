@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  tselivescore:
+    container_name: tselivescore
+    build:
+      context: ../
+      dockerfile: .devcontainer/tselivescore.Dockerfile
+    command: /bin/sh -c "while sleep 1000; do :; done"
+
+  rotating-tor:
+    container_name: rotating-tor
+    image: zhaowde/rotating-tor-http-proxy
+    ports:
+      - 3128:3128
+    environment:
+      TOR_INSTANCES: 5

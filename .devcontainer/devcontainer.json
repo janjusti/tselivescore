@@ -1,0 +1,41 @@
+{
+	"name": "TSELiveScore",
+	"dockerComposeFile": "docker-compose-dsv.yml",
+	"service": "tselivescore-dsv",
+	"workspaceFolder": "/workspace",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"eamodio.gitlens",
+				"ms-python.black-formatter"
+			]
+		}
+	},
+	"settings": {
+		"terminal.integrated.profiles.linux": {
+			"bash": {
+				"path": "/bin/bash",
+				"icon": "terminal-bash"
+			}
+		},
+		"terminal.integrated.fontFamily": "'BitstreamVeraSansMono NF', monospace",
+		"terminal.integrated.letterSpacing": 1,
+		"terminal.integrated.lineHeight": 1.1,
+		"terminal.integrated.defaultProfile.linux": "bash",
+		"python.analysis.autoImportCompletions": false,
+		"extensions.ignoreRecommendations": true,
+		"editor.minimap.enabled": false,
+		"python.linting.flake8Enabled": true,
+		"python.linting.flake8Args": [
+			"--max-line-length=88",
+			"--ignore=E501,E203,W503"
+		],
+		"[python]": {
+			"editor.defaultFormatter": "ms-python.black-formatter",
+			"editor.formatOnSave": true
+		},
+		"python.formatting.provider": "none",
+		"git.autorefresh": true
+	}
+}

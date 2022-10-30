@@ -1,0 +1,2 @@
+requests==2.28.1
+pyreadline3==3.4.1

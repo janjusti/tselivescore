@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  tselivescore-dsv:
+    container_name: tselivescore-dsv
+    extends:
+      file: docker-compose.yml
+      service: tselivescore
+    build:
+      target: dsv
+    volumes:
+      - ..:/workspace:cached
+
+  rotating-tor:
+    container_name: rotating-tor-dsv
+    image: zhaowde/rotating-tor-http-proxy
+    ports:
+      - 3128:3128
+    environment:
+      TOR_INSTANCES: 3
