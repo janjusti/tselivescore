@@ -184,10 +184,10 @@ if __name__ == "__main__":
         help="Digite 'br' para Presidência ou '<estado>' (e.g. sp) para Governo do Estado.",
     )
     parser.add_argument(
-        "--wait", default=5, help="Tempo para aguardar entre requisições."
+        "--wait", default=5, help="Tempo para aguardar entre requisições.", type=int
     )
     parser.add_argument(
-        "--printables", default=5, help="Quantidade de candidatos a exibir."
+        "--printables", default=5, help="Quantidade de candidatos a exibir.", type=int
     )
     args = parser.parse_args()
     selected_code = args.cod
