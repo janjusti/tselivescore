@@ -23,17 +23,14 @@ Opções adicionais:
 
 ```bash
 docker compose run --rm tselivescore br --wait 3 --printables 10
-docker compose run --rm tselivescore br --no-tor   # sem proxy Tor
 ```
-
-O proxy Tor é habilitado por padrão. Use `--no-tor` para requisições diretas ao TSE.
 
 ### Sem Docker
 
 ```bash
 pip install -r src/reqs/requirements-base.txt
 cd src
-python tselivescore.py br --no-tor
+python tselivescore.py br
 ```
 
 ### Devcontainer (opcional)
@@ -51,3 +48,7 @@ python tselivescore.py br
 |-----------|-------------|--------------------|
 | `br`      | Presidência | 6257               |
 | `<uf>`    | Governador  | 6259               |
+
+## Rate limit do TSE
+
+O TSE documenta um limite de [100 requisições por segundo por IP](https://www.tse.jus.br/eleicoes/informacoes-tecnicas-sobre-a-divulgacao-de-resultados). Com `--wait 5` (padrão), cada janela faz 0,2 req/s — dezenas de janelas no mesmo IP ficam bem abaixo do teto.

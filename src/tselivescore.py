@@ -152,14 +152,12 @@ class Eleicao:
         cargo_cd: str,
         wait_time: int,
         qtd_printable: int,
-        tor_enabled: bool,
     ):
         self.title = title
         self.url = url
         self.cargo_cd = cargo_cd
         self.wait_time = wait_time
         self.qtd_printable = qtd_printable
-        self.tor_enabled = tor_enabled
         self.eleicao_stats = None
         self.verificador()
 
@@ -169,7 +167,7 @@ class Eleicao:
             sleep(self.wait_time)
 
     def update_eleicao(self):
-        req = torequests.execute(self.url, "GET", tor_enabled=self.tor_enabled)
+        req = torequests.execute(self.url, "GET")
         if req["status"] == "ok":
             try:
                 payload = parse_response(req["req"].text)
@@ -206,22 +204,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--printables", default=5, help="Quantidade de candidatos a exibir.", type=int
     )
-    parser.add_argument(
-        "--no-tor",
-        action="store_true",
-        help="Desabilita o proxy Tor (habilitado por padrão).",
-    )
     args = parser.parse_args()
     selected_code = args.cod.lower()
     titulo, url = build_url(selected_code)
     cargo_cd = CARGO_PRESIDENTE if selected_code == "br" else CARGO_GOVERNADOR
-    tor_mode = "desabilitado" if args.no_tor else "habilitado"
-    print(f"Iniciando no modo '{titulo}' (Tor {tor_mode})...")
-    Eleicao(
-        titulo,
-        url,
-        cargo_cd,
-        args.wait,
-        args.printables,
-        tor_enabled=not args.no_tor,
-    )
+    print(f"Iniciando no modo '{titulo}'...")
+    Eleicao(titulo, url, cargo_cd, args.wait, args.printables)

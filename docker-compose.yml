@@ -4,15 +4,5 @@ services:
     container_name: tselivescore
     volumes:
       - ./src:/app/src
-    depends_on:
-      - rotating-tor
     environment:
       TZ: America/Sao_Paulo
-
-  rotating-tor:
-    container_name: rotating-tor
-    image: zhaowde/rotating-tor-http-proxy
-    ports:
-      - "3128:3128"
-    environment:
-      TOR_INSTANCES: 5
