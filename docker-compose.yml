@@ -2,7 +2,14 @@ services:
   tselivescore:
     build: .
     container_name: tselivescore
+    ports:
+      - "8080:8080"
     volumes:
       - ./src:/app/src
     environment:
       TZ: America/Sao_Paulo
+      TSELIVESCORE_WAIT: 5
+      TSELIVESCORE_SESSION_TTL: 30
+      TSELIVESCORE_RATE_LIMIT: 120
+      TSELIVESCORE_RATE_WINDOW: 60
+      # TSELIVESCORE_DEBUG: 1  # expõe /api/status, /docs e /openapi.json

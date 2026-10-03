@@ -10,4 +10,6 @@ RUN pip install --no-cache-dir -r requirements-base.txt
 
 COPY src/ src/
 
-ENTRYPOINT ["python", "src/tselivescore.py"]
+EXPOSE 8080
+
+CMD ["python", "src/webapp.py"]

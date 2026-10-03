@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TSELiveScore</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="brand">TSELiveScore</div>
+      <div class="toolbar-actions">
+        <label>
+          Refresh TSE
+          <input id="wait-input" type="number" min="5" max="60" value="5" />
+          s
+        </label>
+        <button id="add-panel-btn" type="button">+ Painel</button>
+      </div>
+    </header>
+
+    <dialog id="add-dialog">
+      <form method="dialog" id="add-form">
+        <h2>Adicionar painel</h2>
+        <label>
+          Categoria
+          <select id="category-select" required></select>
+        </label>
+        <label id="uf-field" class="hidden">
+          Estado
+          <select id="uf-select"></select>
+        </label>
+        <label>
+          Candidatos visíveis
+          <input id="printables-input" type="number" min="1" max="50" value="5" />
+        </label>
+        <div class="dialog-actions">
+          <button type="submit">Adicionar</button>
+          <button type="button" id="cancel-add-btn">Cancelar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="status-banner" class="status-banner" hidden></div>
+    <main id="dashboard" class="dashboard"></main>
+    <template id="panel-template">
+      <article class="panel">
+        <header class="panel-header">
+          <h2 class="panel-title"></h2>
+          <div class="panel-controls">
+            <label class="panel-printables-label">
+              <span>#</span>
+              <input class="panel-printables" type="number" min="1" max="50" />
+            </label>
+            <button class="panel-remove" type="button" title="Remover painel">×</button>
+          </div>
+        </header>
+        <div class="panel-meta"></div>
+        <div class="panel-alert"></div>
+        <table class="candidates">
+          <thead>
+            <tr>
+              <th>Candidato</th>
+              <th>Votos</th>
+              <th>%</th>
+              <th>Δ%</th>
+              <th>HP</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </article>
+    </template>
+
+    <script src="/static/app.js?v=2"></script>
+  </body>
+</html>

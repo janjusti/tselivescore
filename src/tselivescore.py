@@ -3,160 +3,59 @@ from datetime import datetime
 import os
 from time import sleep
 
-from extras import torequests
-from extras.tse_client import (
-    CARGO_GOVERNADOR,
-    CARGO_PRESIDENTE,
-    build_url,
-    normalize_payload,
-    parse_response,
-)
+from extras.eleicao import EleicaoStats, fetch_eleicao_stats, format_duration
+from extras.tse_client import build_url, normalize_panel_key
 
 
-class Candidato:
-    def __init__(
-        self,
-        nome: str,
-        qtd_votos: int,
-        perc_votos: float,
-        sf_e: str,
-        sf_st: str,
-        prev_perc_votos: float,
-    ):
-        self.nome = nome.replace("&apos;", "'")
-        self.qtd_votos = qtd_votos
-        self.perc_votos = perc_votos
-        self.sf_e = sf_e
-        self.sf_st = sf_st
-        self.prev_perc_votos = prev_perc_votos
-        self.hp = None
-
-    def __gt__(self, other):
-        return self.perc_votos < other.perc_votos
-
-
-class EleicaoStats:
-    def __init__(self, prev_stats, raw_data: dict, qtd_printable: int, title: str):
-        self._prev_stats = prev_stats
-        self._raw_data = raw_data
-        self._qtd_printable = qtd_printable
-        self._title = title
-        self._filter_data()
-        self._calc_hp()
-
-    def get_stat(self, key: str, custom_base: dict = None):
-        base = self._raw_data if custom_base is None else custom_base
-        value = base.get(key, "")
-        if type(value) == str:
-            value = value.replace(",", ".")
-            try:
-                value = float(value)
-                if value == int(value):
-                    value = int(value)
-            except ValueError:
-                return value
-        return value
-
-    def _gen_update_dt(self) -> datetime:
-        dt_str = f"{self.get_stat('dt')} {self.get_stat('ht')}"
-        try:
-            return datetime.strptime(dt_str, "%d/%m/%Y %H:%M:%S")
-        except Exception:
-            return None
-
-    def _filter_data(self):
-        self.candidatos = [
-            Candidato(
-                self.get_stat("nm", cand),
-                self.get_stat("vap", cand),
-                self.get_stat("pvap", cand),
-                self.get_stat("e", cand),
-                self.get_stat("st", cand),
-                next(
-                    (
-                        prev_cand.perc_votos
-                        for prev_cand in getattr(self._prev_stats, "candidatos", [])
-                        if prev_cand.nome == self.get_stat("nm", cand)
-                    ),
-                    self.get_stat("pvap", cand),
-                ),
-            )
-            for cand in self.get_stat("cand")
-        ]
-        self.candidatos.sort()
-        self.qtd_vagas = self.get_stat("v")
-        self.eleitorado = self.get_stat("e")
-        self.qtd_sec_totalizadas = self.get_stat("st")
-        self.perc_sec_totalizadas = self.get_stat("pst")
-        self.perc_sec_pendentes = self.get_stat("psnt")
-        self.latest_update_tse = self._gen_update_dt()
-        self.mat_def = self.get_stat("md")
-        self.qtd_votos_validos = self.get_stat("vv")
-
-    def _calc_hp(self):
-        self.perc_comparecimento = self.get_stat("pc")
-        self.perc_voto_valido = self.get_stat("pvv")
-        self.aprox_vv_hipot = int(
-            self.perc_comparecimento
-            / 100
-            * self.perc_voto_valido
-            / 100
-            * self.eleitorado
+def format_cli(stats: EleicaoStats, qtd_printable: int) -> str:
+    os.system("clear")
+    s = f"{stats._title} - {stats.perc_sec_totalizadas}% apurado\n"
+    if stats.perc_sec_totalizadas != 0:
+        s += (
+            f"[Comparecimento: {stats.perc_comparecimento}% | "
+            f"Votos restantes: ~{stats.aprox_votos_restantes:,}]\n"
         )
-        self.aprox_votos_restantes = int(
-            self.aprox_vv_hipot * self.perc_sec_pendentes / 100
-        )
-        cand_lim = self.candidatos[self.qtd_vagas - 1]
-        for cand in self.candidatos[self.qtd_vagas :]:
-            cand.hp = (cand.qtd_votos - cand_lim.qtd_votos) + self.aprox_votos_restantes
-
-    def __repr__(self) -> str:
-        os.system("clear")
-        s = f"{self._title} - {self.perc_sec_totalizadas}% apurado\n"
-        if self.perc_sec_totalizadas != 0:
-            s += f"[Comparecimento: {self.perc_comparecimento}% | Votos restantes: ~{self.aprox_votos_restantes:,}]\n"
-        if self.latest_update_tse is not None:
-            tse_delta_dt = datetime.now() - self.latest_update_tse
-            s += f"Atualizado: {self.latest_update_tse} (atraso de {tse_delta_dt.seconds} segundos)\n"
-        else:
-            s += "Apuração ainda não iniciada.\n"
-        if self.mat_def != "" and self.mat_def != "N":
-            msg = {"E": "Eleito", "S": "Segundo turno"}
-            s += f"\n[Matematicamente definido: {msg[self.mat_def]}]\n\n"
-        filtered_cands = (
-            self.candidatos[: self._qtd_printable]
-            if self._qtd_printable != -1
-            else self.candidatos
-        )
-        for idx, cand in enumerate(filtered_cands):
-            if idx == self.qtd_vagas:
-                s += "---------------\n"
-            if cand.sf_e != "n":
-                s += f"[E: {cand.sf_e}] "
-            if cand.sf_st != "":
-                s += f"[ST: {cand.sf_st}] "
-            s += f"{cand.nome} -> {cand.qtd_votos:,} votos válidos ({cand.perc_votos}"
-            delta_perc_votos = cand.perc_votos - cand.prev_perc_votos
-            s += f"%{f' | {delta_perc_votos:+.2f}%' if delta_perc_votos != 0 else ''})"
-            if cand.hp is not None and cand.hp >= 0:
-                s += f" [HP: {f'{cand.hp:,}'}]"
-            s += "\n"
-        return s
+    if stats.latest_update_tse is not None:
+        tse_delta_dt = datetime.now() - stats.latest_update_tse
+        delay = format_duration(tse_delta_dt.total_seconds())
+        s += f"Atualizado: {stats.latest_update_tse} (há {delay})\n"
+    else:
+        s += "Apuração ainda não iniciada.\n"
+    if stats.mat_def != "" and stats.mat_def != "N":
+        msg = {"E": "Eleito", "S": "Segundo turno"}
+        s += f"\n[Matematicamente definido: {msg[stats.mat_def]}]\n\n"
+    filtered_cands = (
+        stats.candidatos[:qtd_printable]
+        if qtd_printable != -1
+        else stats.candidatos
+    )
+    for idx, cand in enumerate(filtered_cands):
+        if idx == stats.qtd_vagas:
+            s += "---------------\n"
+        if cand.sf_e != "n":
+            s += f"[E: {cand.sf_e}] "
+        if cand.sf_st != "":
+            s += f"[ST: {cand.sf_st}] "
+        s += f"{cand.nome} -> {cand.qtd_votos:,} votos válidos ({cand.perc_votos}"
+        delta_perc_votos = cand.perc_votos - cand.prev_perc_votos
+        s += f"%{f' | {delta_perc_votos:+.2f}%' if delta_perc_votos != 0 else ''})"
+        if cand.hp is not None and cand.hp >= 0:
+            s += f" [HP: {f'{cand.hp:,}'}]"
+        s += "\n"
+    return s
 
 
 class Eleicao:
     def __init__(
         self,
         title: str,
-        url: str,
-        cargo_cd: str,
+        panel_key: str,
         wait_time: int,
         qtd_printable: int,
     ):
         self.title = title
-        self.url = url
-        self.cargo_cd = cargo_cd
-        self.wait_time = wait_time
+        self.panel_key = panel_key
+        self.wait_time = max(wait_time, 5)
         self.qtd_printable = qtd_printable
         self.eleicao_stats = None
         self.verificador()
@@ -167,29 +66,20 @@ class Eleicao:
             sleep(self.wait_time)
 
     def update_eleicao(self):
-        req = torequests.execute(self.url, "GET")
-        if req["status"] == "ok":
-            try:
-                payload = parse_response(req["req"].text)
-                raw_data = normalize_payload(payload, self.cargo_cd)
-            except Exception:
-                print(self.eleicao_stats)
-                print(f"({datetime.now()}) Algo deu ruim: {req['req'].text[:100]}")
-                return
-            if (
-                raw_data["st"]
-                != str(getattr(self.eleicao_stats, "qtd_sec_totalizadas", 0))
-                or raw_data["st"] == "0"
-            ):
-                curr_elec_stats = EleicaoStats(
-                    self.eleicao_stats, raw_data, self.qtd_printable, self.title
-                )
-                print(curr_elec_stats)
-                self.eleicao_stats = curr_elec_stats
-        else:
+        stats, error = fetch_eleicao_stats(
+            self.eleicao_stats, self.panel_key, self.qtd_printable
+        )
+        if error:
             print(self.eleicao_stats)
-            print(f"({datetime.now()}) Req deu ruim: {req['status']}")
+            print(f"({datetime.now()}) Algo deu ruim: {error}")
             return
+        if (
+            stats.qtd_sec_totalizadas
+            != getattr(self.eleicao_stats, "qtd_sec_totalizadas", 0)
+            or stats.qtd_sec_totalizadas == 0
+        ):
+            print(format_cli(stats, self.qtd_printable))
+            self.eleicao_stats = stats
 
 
 if __name__ == "__main__":
@@ -199,14 +89,16 @@ if __name__ == "__main__":
         help="Digite 'br' para Presidência ou '<estado>' (e.g. sp) para Governo do Estado.",
     )
     parser.add_argument(
-        "--wait", default=5, help="Tempo para aguardar entre requisições.", type=int
+        "--wait",
+        default=5,
+        help="Tempo para aguardar entre requisições (mínimo 5).",
+        type=int,
     )
     parser.add_argument(
         "--printables", default=5, help="Quantidade de candidatos a exibir.", type=int
     )
     args = parser.parse_args()
-    selected_code = args.cod.lower()
-    titulo, url = build_url(selected_code)
-    cargo_cd = CARGO_PRESIDENTE if selected_code == "br" else CARGO_GOVERNADOR
+    panel_key = normalize_panel_key(args.cod.lower())
+    titulo, _, _ = build_url(panel_key)
     print(f"Iniciando no modo '{titulo}'...")
-    Eleicao(titulo, url, cargo_cd, args.wait, args.printables)
+    Eleicao(titulo, panel_key, args.wait, args.printables)

@@ -4,11 +4,28 @@ import json
 TSE_BASE_URL = "https://resultados.tse.jus.br/oficial/ele2026"
 TSE_REFERER = "https://resultados.tse.jus.br/oficial/app/index.html"
 
-CARGO_PRESIDENTE = "1"
-CARGO_GOVERNADOR = "3"
-
 ELEICAO_FEDERAL = "6257"
 ELEICAO_ESTADUAL = "6259"
+
+CARGO_PRESIDENTE = "1"
+CARGO_GOVERNADOR = "3"
+CARGO_DEP_FEDERAL = "6"
+CARGO_DEP_ESTADUAL = "7"
+CARGO_DEP_DISTRITAL = "8"
+
+CARGO_LABELS = {
+    CARGO_PRESIDENTE: "Presidente",
+    CARGO_GOVERNADOR: "Governador",
+    CARGO_DEP_FEDERAL: "Deputado Federal",
+    CARGO_DEP_ESTADUAL: "Deputado Estadual",
+    CARGO_DEP_DISTRITAL: "Deputado Distrital",
+}
+
+UFS = [
+    "ac", "al", "am", "ap", "ba", "ce", "df", "es", "go", "ma", "mg", "ms", "mt",
+    "pa", "pb", "pe", "pi", "pr", "rj", "rn", "ro", "rr", "rs", "sc", "se", "sp",
+    "to",
+]
 
 
 def decode_jws(token: str) -> dict:
@@ -64,17 +81,72 @@ def normalize_payload(payload: dict, cargo_cd: str) -> dict:
     }
 
 
-def build_url(cod: str) -> tuple[str, str]:
-    if cod == "br":
-        return (
-            "Presidência",
-            f"{TSE_BASE_URL}/{ELEICAO_FEDERAL}/dados/br/"
-            f"br-c000{CARGO_PRESIDENTE}-e00{ELEICAO_FEDERAL}-u.jws",
-        )
+def normalize_panel_key(key: str) -> str:
+    key = key.lower()
+    if ":" not in key:
+        legacy = {"br": f"br:{CARGO_PRESIDENTE}"}
+        if key in legacy:
+            return legacy[key]
+        return f"{key}:{CARGO_GOVERNADOR}"
+    return key
 
-    uf = cod.lower()
-    return (
-        f"Governo {uf.upper()}",
-        f"{TSE_BASE_URL}/{ELEICAO_ESTADUAL}/dados/{uf}/"
-        f"{uf}-c000{CARGO_GOVERNADOR}-e00{ELEICAO_ESTADUAL}-u.jws",
+
+def resolve_panel(key: str) -> tuple[str, str, str]:
+    key = normalize_panel_key(key)
+    uf, cargo_cd = key.split(":", 1)
+    if uf == "df" and cargo_cd == CARGO_DEP_ESTADUAL:
+        cargo_cd = CARGO_DEP_DISTRITAL
+    return key, uf, cargo_cd
+
+
+def panel_title(uf: str, cargo_cd: str) -> str:
+    cargo_nome = CARGO_LABELS[cargo_cd]
+    if cargo_cd == CARGO_PRESIDENTE:
+        return "Presidência"
+    return f"{cargo_nome} {uf.upper()}"
+
+
+def build_url(key: str) -> tuple[str, str, str]:
+    key, uf, cargo_cd = resolve_panel(key)
+    eleicao = ELEICAO_FEDERAL if cargo_cd == CARGO_PRESIDENTE else ELEICAO_ESTADUAL
+    cargo_file = cargo_cd.zfill(4)
+    url = (
+        f"{TSE_BASE_URL}/{eleicao}/dados/{uf}/"
+        f"{uf}-c{cargo_file}-e00{eleicao}-u.jws"
     )
+    return panel_title(uf, cargo_cd), url, cargo_cd
+
+
+def dashboard_categories() -> list[dict]:
+    return [
+        {
+            "id": "presidente",
+            "label": "Presidência",
+            "requires_uf": False,
+            "options": [
+                {"key": f"br:{CARGO_PRESIDENTE}", "label": "Presidência"},
+            ],
+        },
+        {
+            "id": "governador",
+            "label": "Governadores",
+            "singular": "Governador",
+            "requires_uf": True,
+            "cargo": CARGO_GOVERNADOR,
+        },
+        {
+            "id": "dep_federal",
+            "label": "Deputados Federais",
+            "singular": "Deputado Federal",
+            "requires_uf": True,
+            "cargo": CARGO_DEP_FEDERAL,
+        },
+        {
+            "id": "dep_estadual",
+            "label": "Deputados Estaduais",
+            "singular": "Deputado Estadual",
+            "requires_uf": True,
+            "cargo": CARGO_DEP_ESTADUAL,
+            "uf_labels": {"df": "Deputado Distrital"},
+        },
+    ]
