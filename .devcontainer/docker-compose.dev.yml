@@ -1,0 +1,5 @@
+services:
+  tselivescore:
+    volumes:
+      - ..:/app
+    command: sleep infinity
