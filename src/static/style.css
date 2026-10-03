@@ -173,7 +173,6 @@ button:hover {
   border-radius: 10px;
   padding: 0.75rem;
   min-width: 0;
-  overflow-x: auto;
 }
 
 .panel-header {
@@ -265,6 +264,7 @@ button:hover {
 
 .candidates {
   width: 100%;
+  max-width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -297,24 +297,25 @@ button:hover {
   width: 40%;
 }
 
-.candidates.no-dist.no-delta col.col-name {
-  width: 38%;
-}
-
-.candidates.no-dist col.col-num {
-  width: 4.75rem;
-}
-
-.candidates.no-dist col.col-pct {
-  width: 4.25rem;
-}
-
-.candidates.no-dist col.col-delta {
-  width: 4.75rem;
-}
-
 .candidates.no-dist col.col-dist {
   width: 0;
+  visibility: collapse;
+}
+
+.candidates.no-dist.no-delta col.col-name {
+  width: 44%;
+}
+
+.candidates.no-dist.no-delta col.col-num {
+  width: 4rem;
+}
+
+.candidates.no-dist.no-delta col.col-pct {
+  width: 3.75rem;
+}
+
+.candidates.no-dist.no-delta col.col-margem {
+  width: 4rem;
 }
 
 .candidates.no-margem col.col-margem {
@@ -384,11 +385,22 @@ button:hover {
 
 .candidates.no-dist .dist-header,
 .candidates.no-dist .dist-cell {
-  display: none;
+  visibility: collapse;
+  width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.candidates.no-delta col.col-delta {
+  width: 0;
+  visibility: collapse;
 }
 
 .candidates.no-delta .col-delta {
-  display: none;
+  visibility: collapse;
+  width: 0;
+  padding: 0;
+  border: 0;
 }
 
 .candidates.no-margem .margem-header,
