@@ -235,17 +235,71 @@ function formatTseTimestamp(isoString) {
   });
 }
 
+function isCandEleitoProporcional(cand) {
+  return cand.sf_e === "s" || cand.garantido;
+}
+
+function legendaSubtitleClass(cand) {
+  const classes = ["cand-subtitle"];
+  if (cand.eliminado_mat) {
+    classes.push("cand-subtitle-muted");
+  } else if (isCandEleitoProporcional(cand)) {
+    classes.push("cand-subtitle-in", "cand-subtitle-safe");
+  } else if (cand.em_perigo) {
+    classes.push("cand-subtitle-edge");
+  } else if (cand.dentro_proj) {
+    classes.push("cand-subtitle-in");
+  } else if (cand.dentro_proj === false) {
+    classes.push("cand-subtitle-out");
+  }
+  return classes.join(" ");
+}
+
+function legendaSubtitleTitle(cand) {
+  if (isCandEleitoProporcional(cand)) {
+    return cand.garantido ? "Eleito matematicamente" : "Eleito";
+  }
+  if (cand.em_perigo) {
+    return "Na beira do corte: última vaga projetada com folga apertada";
+  }
+  if (cand.dentro_proj) {
+    return "Dentro da projeção de vagas da legenda";
+  }
+  if (cand.dentro_proj === false && !cand.eliminado_mat) {
+    return "Fora da projeção de vagas da legenda";
+  }
+  if (cand.eliminado_mat) {
+    return "Eliminado matematicamente na legenda";
+  }
+  return "";
+}
+
 function formatCandSubtitle(cand) {
   const posicao = cand.posicao_legenda ?? cand.posicao_partido;
   if (!cand.partido_sg || posicao == null) return "";
   const pos = `${posicao}º`;
   const cadeiras = cand.cadeiras_proj > 0 ? `/${cand.cadeiras_proj}` : "";
-  const emPerigo = Boolean(cand.em_perigo);
-  const title = emPerigo
-    ? ' title="Última vaga projetada com folga apertada; ainda pode perder a vaga"'
-    : "";
-  const cls = emPerigo ? "cand-subtitle cand-subtitle-cutoff" : "cand-subtitle";
-  return `<div class="${cls}"${title}>${cand.partido_sg} · ${pos}${cadeiras}</div>`;
+  const title = legendaSubtitleTitle(cand);
+  const titleAttr = title ? ` title="${title}"` : "";
+  return `<div class="${legendaSubtitleClass(cand)}"${titleAttr}>${cand.partido_sg} · ${pos}${cadeiras}</div>`;
+}
+
+// Mesma lógica de escala do em_perigo no backend (proporcional.py).
+const RISCO_FOLGA_RATIO = 0.1;
+const MARGEM_HEAT_SAFE_RATIO = 0.3;
+
+function margemHeat(cand) {
+  if (cand.margem_corte == null || isCandEleitoProporcional(cand)) return null;
+  const margem = Math.max(0, Number(cand.margem_corte) || 0);
+  const rest = Number(cand.restantes_legenda) || 0;
+  if (!rest) return 0;
+  const ratio = margem / rest;
+  if (ratio >= MARGEM_HEAT_SAFE_RATIO) return 0;
+  if (ratio >= RISCO_FOLGA_RATIO) {
+    const t = (ratio - RISCO_FOLGA_RATIO) / (MARGEM_HEAT_SAFE_RATIO - RISCO_FOLGA_RATIO);
+    return 0.2 * (1 - t);
+  }
+  return 0.2 + 0.8 * (1 - ratio / RISCO_FOLGA_RATIO);
 }
 
 function formatUpdateDelay(seconds) {
@@ -512,7 +566,6 @@ function renderPanelData(panelEl, data) {
       (isProporcional && cand.sf_e === "n" && cand.eliminado_mat === true);
     if (eliminado) tr.classList.add("eliminated");
     if (isProporcional && cand.em_perigo) tr.classList.add("at-cutoff");
-
     if (!isProporcional) {
       const deltaKey = `${panelId}:${cand.nome}`;
       const prevDelta = prevDeltas.get(deltaKey);
@@ -542,13 +595,21 @@ function renderPanelData(panelEl, data) {
 
     let margemTitle = "";
     let margemCell = "";
+    let margemStyle = "";
     if (isProporcional && cand.margem_corte != null) {
       const restLeg = formatNumber(cand.restantes_legenda);
       const tipo = cand.margem_folga ? "Folga" : "Déficit";
       margemTitle = `${tipo}: ${formatNumber(cand.margem_corte)} · Restantes legenda: ~${restLeg}`;
-      const cls = cand.margem_folga ? "margem-folga" : "margem-deficit";
       const prefix = cand.margem_folga ? "+" : "";
-      margemCell = `<span class="margem-value ${cls}">${prefix}${formatCompact(cand.margem_corte)}</span>`;
+      const heat = margemHeat(cand);
+      const settled = heat === null;
+      const valueCls = settled || heat === 0
+        ? "margem-value margem-value-settled"
+        : "margem-value";
+      if (!settled && heat > 0) {
+        margemStyle = ` style="--margem-heat: ${heat.toFixed(3)}"`;
+      }
+      margemCell = `<span class="${valueCls}">${prefix}${formatCompact(cand.margem_corte)}</span>`;
     }
 
     tr.innerHTML = `
@@ -563,7 +624,7 @@ function renderPanelData(panelEl, data) {
       <td class="col-pct">${formatPerc(cand.perc_votos)}</td>
       <td class="col-delta">${deltaCell}</td>
       <td class="col-dist dist-cell" title="${distTitle}">${distCell}</td>
-      <td class="col-margem margem-cell" title="${margemTitle}">${margemCell}</td>
+      <td class="col-margem margem-cell"${margemStyle} title="${margemTitle}">${margemCell}</td>
     `;
     tbody.appendChild(tr);
   });

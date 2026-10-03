@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=10" />
+    <link rel="stylesheet" href="/static/style.css?v=14" />
   </head>
   <body>
     <header class="toolbar">
@@ -26,9 +26,9 @@
             <dt>Dist.</dt>
             <dd>atraso em votos até o líder; se Dist. &gt; Restantes, eliminado matematicamente</dd>
             <dt>Legenda</dt>
-            <dd>partido e posição na legenda (coligação/federação), ex. UNIÃO · 2º/2 (proporcional)</dd>
+            <dd>verde = dentro, amarelo = na beira do corte, vermelho = fora (proporcional)</dd>
             <dt>Marg.</dt>
-            <dd>margem (+) ou déficit em votos até o corte da legenda (proporcional)</dd>
+            <dd>folga (+) ou déficit até o corte; cor indica proximidade (neutra se já eleito)</dd>
           </dl>
         </details>
         <label>
@@ -111,6 +111,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=21"></script>
+    <script src="/static/app.js?v=25"></script>
   </body>
 </html>

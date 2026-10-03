@@ -474,16 +474,20 @@ button:hover {
   display: none;
 }
 
-.margem-folga {
-  color: var(--ok);
+.margem-value {
+  --h: var(--margem-heat, 0);
+  color: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--muted), var(--warn) calc(var(--h) * 100%)),
+    var(--danger) calc(max(0, (var(--h) - 0.4) / 0.6) * 100%)
+  );
 }
 
-.margem-deficit {
-  color: var(--warn);
+.margem-value-settled {
+  color: var(--muted);
 }
 
-.candidates tr.eliminated .margem-deficit,
-.candidates tr.eliminated .margem-folga {
+.candidates tr.eliminated .margem-value {
   color: inherit;
 }
 
@@ -525,9 +529,25 @@ button:hover {
   line-height: 1.25;
 }
 
-.cand-subtitle-cutoff {
+.cand-subtitle-in {
+  color: var(--ok);
+}
+
+.cand-subtitle-edge {
   color: var(--warn);
   font-weight: 600;
+}
+
+.cand-subtitle-out {
+  color: var(--danger);
+}
+
+.cand-subtitle-safe {
+  font-weight: 600;
+}
+
+.cand-subtitle-muted {
+  color: #6e7681;
 }
 
 .candidates tr.at-cutoff td {
