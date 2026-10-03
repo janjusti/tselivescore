@@ -13,7 +13,13 @@ def format_duration(seconds: int | float | None) -> str | None:
     days, rem = divmod(total, 86400)
     hours, rem = divmod(rem, 3600)
     minutes, secs = divmod(rem, 60)
-    return f"{days}d{hours}h{minutes}m{secs}s"
+    if days:
+        return f"{days}d{hours}h{minutes}m{secs}s"
+    if hours:
+        return f"{hours}h{minutes}m{secs}s"
+    if minutes:
+        return f"{minutes}m{secs}s"
+    return f"{secs}s"
 
 
 class Candidato:
