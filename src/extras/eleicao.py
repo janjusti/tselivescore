@@ -116,6 +116,8 @@ class Candidato:
         self.margem_corte = None
         self.margem_folga = None
         self.restantes_legenda = None
+        self.em_perigo = False
+        self.nascimento = ""
 
     def __gt__(self, other):
         return self.perc_votos < other.perc_votos
@@ -133,6 +135,7 @@ class Candidato:
             "viavel": self.viavel,
             "partido_sg": self.par_sg,
             "posicao_partido": self.posicao_partido,
+            "posicao_legenda": self.posicao_legenda,
             "cadeiras_proj": self.cadeiras_proj,
             "dentro_proj": self.dentro_proj,
             "legenda_sigla": self.legenda_sigla,
@@ -141,6 +144,7 @@ class Candidato:
             "margem_corte": self.margem_corte,
             "margem_folga": self.margem_folga,
             "restantes_legenda": self.restantes_legenda,
+            "em_perigo": self.em_perigo,
         }
 
 
@@ -204,6 +208,7 @@ class EleicaoStats:
             )
             item.agr_id = cand.get("_agr_id") or cand.get("agr_id")
             item.par_sg = cand.get("_par_sg") or cand.get("par_sg")
+            item.nascimento = cand.get("dna") or cand.get("dn") or ""
             self.candidatos.append(item)
         self._agr_list = self.get_stat("agr") or []
         _, _, self.cargo_cd = resolve_panel(self._panel_key)
@@ -230,6 +235,7 @@ class EleicaoStats:
             int(self.qtd_vagas or 0),
             int(self.qtd_votos_validos or 0),
             self.aprox_votos_restantes,
+            float(self.perc_sec_totalizadas or 0),
         )
 
     def _calc_aprox_votos_restantes(self):

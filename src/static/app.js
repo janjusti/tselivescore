@@ -4,6 +4,7 @@ const SESSION_KEY = "tselivescore-session-id";
 const dashboardEl = document.getElementById("dashboard");
 const statusEl = document.getElementById("status-banner");
 const liveIndicator = document.getElementById("live-indicator");
+const toolbarMetrics = document.getElementById("toolbar-metrics");
 const waitInput = document.getElementById("wait-input");
 const addDialog = document.getElementById("add-dialog");
 const addForm = document.getElementById("add-form");
@@ -22,8 +23,12 @@ let meta = {
 };
 let panels = [];
 let heartbeatTimer = null;
+let freshnessTimer = null;
 let sessionId = null;
 const prevDeltas = new Map();
+
+const UPDATE_FRESHNESS_WINDOW_S = 60;
+const UPDATE_LIVE_THRESHOLD_S = 15;
 
 function apiUrl(path) {
   return new URL(path, window.location.href).href;
@@ -91,6 +96,15 @@ function saveState() {
     STORAGE_KEY,
     JSON.stringify({ panels, wait: Number(waitInput.value) })
   );
+}
+
+function scopeFromKey(key) {
+  return key.split(":")[0].toLowerCase();
+}
+
+function scopeLabel(uf) {
+  if (uf === "br") return "Brasil";
+  return uf.toUpperCase();
 }
 
 function panelLabel(key) {
@@ -222,10 +236,73 @@ function formatTseTimestamp(isoString) {
 }
 
 function formatCandSubtitle(cand) {
-  if (!cand.partido_sg || cand.posicao_partido == null) return "";
-  const pos = `${cand.posicao_partido}º`;
+  const posicao = cand.posicao_legenda ?? cand.posicao_partido;
+  if (!cand.partido_sg || posicao == null) return "";
+  const pos = `${posicao}º`;
   const cadeiras = cand.cadeiras_proj > 0 ? `/${cand.cadeiras_proj}` : "";
-  return `<div class="cand-subtitle">${cand.partido_sg} · ${pos}${cadeiras}</div>`;
+  const emPerigo = Boolean(cand.em_perigo);
+  const title = emPerigo
+    ? ' title="Última vaga projetada com folga apertada; ainda pode perder a vaga"'
+    : "";
+  const cls = emPerigo ? "cand-subtitle cand-subtitle-cutoff" : "cand-subtitle";
+  return `<div class="${cls}"${title}>${cand.partido_sg} · ${pos}${cadeiras}</div>`;
+}
+
+function formatUpdateDelay(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h`;
+}
+
+function applyUpdateFreshness(updatedEl, delaySeconds) {
+  if (!updatedEl || delaySeconds == null) return;
+
+  const freshness = Math.max(0, 1 - delaySeconds / UPDATE_FRESHNESS_WINDOW_S);
+  updatedEl.style.setProperty("--freshness", freshness.toFixed(3));
+  updatedEl.classList.toggle("updated-live", delaySeconds <= UPDATE_LIVE_THRESHOLD_S);
+}
+
+function renderPanelUpdated(updatedEl, data) {
+  if (!updatedEl) return;
+
+  if (!data.latest_update_tse) {
+    updatedEl.textContent = "";
+    updatedEl.removeAttribute("data-updated-at");
+    updatedEl.classList.remove("updated-live");
+    updatedEl.style.removeProperty("--freshness");
+    return;
+  }
+
+  const delaySeconds = Number(data.tse_delay_seconds) || 0;
+  const delayLabel = data.tse_delay_human || formatUpdateDelay(delaySeconds);
+  updatedEl.dataset.updatedAt = data.latest_update_tse;
+  updatedEl.innerHTML =
+    `Atualizado: <span class="panel-updated-time">${formatTseTimestamp(data.latest_update_tse)}</span> ` +
+    `(<span class="panel-updated-delay">há ${delayLabel}</span>)`;
+  applyUpdateFreshness(updatedEl, delaySeconds);
+}
+
+function refreshUpdateFreshness() {
+  for (const panel of panels) {
+    const panelEl = dashboardEl.querySelector(`[data-id="${panel.id}"]`);
+    const updatedEl = panelEl?.querySelector(".panel-updated");
+    const iso = updatedEl?.dataset.updatedAt;
+    if (!updatedEl || !iso) continue;
+
+    const delaySeconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    const delayEl = updatedEl.querySelector(".panel-updated-delay");
+    if (delayEl) {
+      delayEl.textContent = `há ${formatUpdateDelay(delaySeconds)}`;
+    }
+    applyUpdateFreshness(updatedEl, delaySeconds);
+  }
+}
+
+function scheduleFreshnessRefresh() {
+  if (freshnessTimer) clearInterval(freshnessTimer);
+  freshnessTimer = setInterval(refreshUpdateFreshness, 1000);
 }
 
 function formatLegendasResumo(legendas) {
@@ -233,9 +310,11 @@ function formatLegendasResumo(legendas) {
   return legendas.map((l) => `${l.sigla} ${l.cadeiras}`).join(" · ");
 }
 
-function formatBadges(cand) {
+function formatBadges(cand, isProporcional = false) {
   const badges = [];
-  if (cand.sf_e === "s") {
+  if (isProporcional && cand.sf_e === "s") {
+    badges.push('<span class="badge badge-elected">Eleito</span>');
+  } else if (cand.sf_e === "s") {
     badges.push('<span class="badge badge-turno">2º turno</span>');
   } else if (cand.garantido) {
     badges.push('<span class="badge badge-elected-mat">Eleito (mat.)</span>');
@@ -252,6 +331,100 @@ function setLiveIndicator(ok) {
   if (!liveIndicator) return;
   liveIndicator.hidden = false;
   liveIndicator.classList.toggle("stale", !ok);
+}
+
+function renderPanelStats(statsEl, data, pct, isProporcional) {
+  if (!statsEl) return;
+
+  if (!data.apuracao_iniciada) {
+    statsEl.textContent = "Apuração ainda não iniciada.";
+    return;
+  }
+
+  const lines = [];
+  const restantes = Number(data.aprox_votos_restantes) || 0;
+  if (pct < 100 && restantes > 0) {
+    lines.push(`Restantes: ~${formatCompact(restantes)}`);
+  }
+  if (isProporcional && data.legendas_resumo?.length) {
+    lines.push(formatLegendasResumo(data.legendas_resumo));
+  }
+
+  statsEl.textContent = "";
+  for (const line of lines) {
+    const row = document.createElement("div");
+    row.className = "panel-stat-line";
+    row.textContent = line;
+    statsEl.appendChild(row);
+  }
+}
+
+function collectScopeComparecimento(panelsData) {
+  const scopes = new Map();
+  for (const panel of panels) {
+    const data = panelsData?.[panel.key];
+    if (!data || data.error || !data.apuracao_iniciada) continue;
+    const uf = scopeFromKey(panel.key);
+    if (!scopes.has(uf)) {
+      scopes.set(uf, data.perc_comparecimento);
+    }
+  }
+  return scopes;
+}
+
+function formatScopeComparecimento(scopes) {
+  return [...scopes.entries()]
+    .sort(([a], [b]) => {
+      if (a === "br") return -1;
+      if (b === "br") return 1;
+      return a.localeCompare(b);
+    })
+    .map(([uf, pct]) => `${scopeLabel(uf)} ${Number(pct).toFixed(1)}%`)
+    .join(" · ");
+}
+
+function buildComparecimentoMetric(panelsData) {
+  const scopes = collectScopeComparecimento(panelsData);
+  if (!scopes.size) return null;
+  return {
+    id: "comparecimento",
+    label: "Comparecimento",
+    value: formatScopeComparecimento(scopes),
+  };
+}
+
+const toolbarMetricBuilders = [buildComparecimentoMetric];
+
+function renderToolbarMetric(row, metric) {
+  row.dataset.metric = metric.id;
+  row.replaceChildren();
+
+  const label = document.createElement("span");
+  label.className = "toolbar-metric-label";
+  label.textContent = `${metric.label}: `;
+  row.append(label, metric.value);
+}
+
+function renderToolbarMetrics(panelsData) {
+  if (!toolbarMetrics) return;
+
+  const metrics = toolbarMetricBuilders
+    .map((build) => build(panelsData))
+    .filter(Boolean);
+
+  toolbarMetrics.replaceChildren();
+  if (!metrics.length) {
+    toolbarMetrics.hidden = true;
+    return;
+  }
+
+  for (const metric of metrics) {
+    const row = document.createElement("div");
+    row.className = "toolbar-metric";
+    renderToolbarMetric(row, metric);
+    toolbarMetrics.appendChild(row);
+  }
+  toolbarMetrics.hidden = false;
 }
 
 function renderPanelData(panelEl, data) {
@@ -275,7 +448,7 @@ function renderPanelData(panelEl, data) {
     progressFill.style.width = "0%";
     progressBar.setAttribute("aria-valuenow", "0");
     statsEl.textContent = "";
-    updatedEl.textContent = "";
+    renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
     errorEl.textContent = "";
     tbody.innerHTML = "";
@@ -286,7 +459,7 @@ function renderPanelData(panelEl, data) {
     apuracaoLabel.textContent = "";
     progressFill.style.width = "0%";
     statsEl.textContent = "";
-    updatedEl.textContent = "";
+    renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
     errorEl.textContent = data.error;
     tbody.innerHTML = "";
@@ -305,26 +478,9 @@ function renderPanelData(panelEl, data) {
   progressBar.setAttribute("aria-valuemin", "0");
   progressBar.setAttribute("aria-valuemax", "100");
 
-  if (data.apuracao_iniciada) {
-    let stats = `Comparecimento: ${data.perc_comparecimento}%`;
-    const restantes = Number(data.aprox_votos_restantes) || 0;
-    if (pct < 100 && restantes > 0) {
-      stats += ` · Restantes: ~${formatCompact(restantes)}`;
-    }
-    if (isProporcional && data.legendas_resumo?.length) {
-      stats += ` · ${formatLegendasResumo(data.legendas_resumo)}`;
-    }
-    statsEl.textContent = stats;
-  } else {
-    statsEl.textContent = "Apuração ainda não iniciada.";
-  }
+  renderPanelStats(statsEl, data, pct, isProporcional);
 
-  if (data.latest_update_tse) {
-    const delay = data.tse_delay_human || `${data.tse_delay_seconds}s`;
-    updatedEl.textContent = `Atualizado: ${formatTseTimestamp(data.latest_update_tse)} (há ${delay})`;
-  } else {
-    updatedEl.textContent = "";
-  }
+  renderPanelUpdated(updatedEl, data);
 
   alertEl.textContent = data.mat_def_label
     ? `Matematicamente definido: ${data.mat_def_label}`
@@ -341,14 +497,21 @@ function renderPanelData(panelEl, data) {
   const panelId = panelEl.dataset.id;
   data.candidatos?.forEach((cand, idx) => {
     const tr = document.createElement("tr");
-    if (cand.sf_e === "s") tr.classList.add("turno");
-    if (cand.garantido || (cand.sf_e !== "n" && cand.sf_e !== "s")) tr.classList.add("elected");
+    if (isProporcional) {
+      if (cand.sf_e === "s" || cand.garantido) tr.classList.add("elected");
+    } else {
+      if (cand.sf_e === "s") tr.classList.add("turno");
+      if (cand.garantido || (cand.sf_e !== "n" && cand.sf_e !== "s")) {
+        tr.classList.add("elected");
+      }
+    }
     if (isMajoritario && idx === qtdVagas) tr.classList.add("cutoff");
     const belowCutoff = idx >= qtdVagas;
     const eliminado =
       (isMajoritario && belowCutoff && cand.viavel === false) ||
       (isProporcional && cand.sf_e === "n" && cand.eliminado_mat === true);
     if (eliminado) tr.classList.add("eliminated");
+    if (isProporcional && cand.em_perigo) tr.classList.add("at-cutoff");
 
     if (!isProporcional) {
       const deltaKey = `${panelId}:${cand.nome}`;
@@ -393,7 +556,7 @@ function renderPanelData(panelEl, data) {
         <div class="cand-name">
           <span>${cand.nome}</span>
           ${formatCandSubtitle(cand)}
-          ${formatBadges(cand)}
+          ${formatBadges(cand, isProporcional)}
         </div>
       </td>
       <td class="col-num" title="${formatNumber(cand.qtd_votos)}">${formatCompact(cand.qtd_votos)}</td>
@@ -413,6 +576,7 @@ function renderDashboardData(data) {
     if (!panelEl) continue;
     renderPanelData(panelEl, data.panels?.[panel.key]);
   }
+  renderToolbarMetrics(data.panels);
 }
 
 async function sendHeartbeat() {
@@ -497,6 +661,7 @@ async function init() {
   }
   await sendHeartbeat();
   scheduleHeartbeat();
+  scheduleFreshnessRefresh();
 }
 
 document.getElementById("add-panel-btn").addEventListener("click", () => {

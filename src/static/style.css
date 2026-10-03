@@ -39,12 +39,37 @@ body {
   z-index: 10;
 }
 
+.toolbar-start {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
 .brand {
   font-weight: 700;
   letter-spacing: 0.04em;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.toolbar-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.toolbar-metrics:empty {
+  display: none;
+}
+
+.toolbar-metric-label {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .live-indicator {
@@ -244,6 +269,47 @@ button:hover {
 .panel-updated {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.panel-updated {
+  --freshness: 0;
+}
+
+.panel-updated-delay {
+  color: color-mix(in srgb, var(--accent) calc(var(--freshness) * 100%), var(--muted));
+  font-weight: calc(400 + var(--freshness) * 350);
+  transition: color 0.9s ease, font-weight 0.9s ease;
+}
+
+.panel-updated.updated-live .panel-updated-delay {
+  animation: update-delay-pulse 2s ease-in-out infinite;
+}
+
+@keyframes update-delay-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.panel-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.panel-stat-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-stats:empty {
+  display: none;
 }
 
 .panel-alert {
@@ -457,6 +523,19 @@ button:hover {
   color: var(--muted);
   font-size: 0.75rem;
   line-height: 1.25;
+}
+
+.cand-subtitle-cutoff {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.candidates tr.at-cutoff td {
+  background: #d2992210;
+}
+
+.candidates tr.at-cutoff td.col-name {
+  box-shadow: inset 3px 0 0 var(--warn);
 }
 
 .cand-badges {

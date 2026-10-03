@@ -159,6 +159,7 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
                             "margem_corte": None,
                             "margem_folga": None,
                             "restantes_legenda": None,
+                            "em_perigo": False,
                             "sf_e": "n",
                             "sf_st": "",
                             "distancia_votos": None,
@@ -215,7 +216,8 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
             apply_mat_def_majoritario(candidatos, mat_def)
 
         now = datetime.now()
-        tse_update = now - timedelta(seconds=45 + (tick % 20))
+        # Simula leitura recente do TSE a cada tick (2–7s), para testar destaque de atualização.
+        tse_update = now - timedelta(seconds=2 + (tick % 6))
         tse_delay = int((now - tse_update).total_seconds())
 
         entry = {

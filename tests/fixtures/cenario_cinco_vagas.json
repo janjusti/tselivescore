@@ -1,0 +1,21 @@
+{
+  "descricao": "5 vagas, QE=10000; QP A=2 B=1 C=1; sobra 80/20 vai para B (B2)",
+  "vagas": 5,
+  "vv": 50000,
+  "agr": [
+    {"nm": "A", "tp": "i", "par": [{"sg": "A", "tvan": "22000", "cand": []}]},
+    {"nm": "B", "tp": "i", "par": [{"sg": "B", "tvan": "18000", "cand": []}]},
+    {"nm": "C", "tp": "i", "par": [{"sg": "C", "tvan": "10000", "cand": []}]}
+  ],
+  "candidatos": [
+    {"nome": "A1", "qtd_votos": 12000, "agr_id": "A", "par_sg": "A", "sf_e": "n"},
+    {"nome": "A2", "qtd_votos": 8000, "agr_id": "A", "par_sg": "A", "sf_e": "n"},
+    {"nome": "A3", "qtd_votos": 2000, "agr_id": "A", "par_sg": "A", "sf_e": "n"},
+    {"nome": "B1", "qtd_votos": 15000, "agr_id": "B", "par_sg": "B", "sf_e": "n"},
+    {"nome": "B2", "qtd_votos": 3000, "agr_id": "B", "par_sg": "B", "sf_e": "n"},
+    {"nome": "C1", "qtd_votos": 9000, "agr_id": "C", "par_sg": "C", "sf_e": "n"},
+    {"nome": "C2", "qtd_votos": 1000, "agr_id": "C", "par_sg": "C", "sf_e": "n"}
+  ],
+  "expected_seats": {"A": 2, "B": 2, "C": 1},
+  "expected_elect": ["A1", "A2", "B1", "B2", "C1"]
+}

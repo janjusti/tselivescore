@@ -4,13 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=6" />
+    <link rel="stylesheet" href="/static/style.css?v=10" />
   </head>
   <body>
     <header class="toolbar">
-      <div class="brand">
-        TSELiveScore
-        <span id="live-indicator" class="live-indicator" hidden>ao vivo</span>
+      <div class="toolbar-start">
+        <div class="brand">
+          TSELiveScore
+          <span id="live-indicator" class="live-indicator" hidden>ao vivo</span>
+        </div>
+        <div id="toolbar-metrics" class="toolbar-metrics" hidden></div>
       </div>
       <div class="toolbar-actions">
         <details class="legend">
@@ -23,7 +26,7 @@
             <dt>Dist.</dt>
             <dd>atraso em votos até o líder; se Dist. &gt; Restantes, eliminado matematicamente</dd>
             <dt>Legenda</dt>
-            <dd>partido e posição na legenda, ex. UNIÃO · 2º/2 (proporcional)</dd>
+            <dd>partido e posição na legenda (coligação/federação), ex. UNIÃO · 2º/2 (proporcional)</dd>
             <dt>Marg.</dt>
             <dd>margem (+) ou déficit em votos até o corte da legenda (proporcional)</dd>
           </dl>
@@ -108,6 +111,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=15"></script>
+    <script src="/static/app.js?v=21"></script>
   </body>
 </html>
