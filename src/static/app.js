@@ -200,15 +200,45 @@ function formatNumber(value) {
   return new Intl.NumberFormat("pt-BR").format(value ?? 0);
 }
 
-const compactFormatter = new Intl.NumberFormat("pt-BR", {
-  notation: "compact",
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
-
 function formatCompact(value) {
-  if (value == null) return "";
-  return compactFormatter.format(value);
+  const n = Number(value);
+  if (value == null || value === "" || !Number.isFinite(n)) return "";
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+
+  if (abs >= 1_000_000) {
+    const scaled = abs / 1_000_000;
+    const text = scaled.toLocaleString("pt-BR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: scaled >= 10 ? 1 : 2,
+    });
+    return `${sign}${text}M`;
+  }
+
+  if (abs >= 10_000) {
+    const scaled = Math.round(abs / 1_000);
+    return `${sign}${scaled.toLocaleString("pt-BR")}K`;
+  }
+
+  if (abs >= 1_000) {
+    const scaled = abs / 1_000;
+    const text = scaled.toLocaleString("pt-BR", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+    });
+    return `${sign}${text}K`;
+  }
+
+  return `${sign}${abs.toLocaleString("pt-BR")}`;
+}
+
+function formatSignedCompact(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  const body = formatCompact(Math.abs(n));
+  if (n > 0) return `+${body}`;
+  if (n < 0) return `-${body}`;
+  return body;
 }
 
 function formatPerc(value) {
@@ -600,7 +630,9 @@ function renderPanelData(panelEl, data) {
       const restLeg = formatNumber(cand.restantes_legenda);
       const tipo = cand.margem_folga ? "Folga" : "Déficit";
       margemTitle = `${tipo}: ${formatNumber(cand.margem_corte)} · Restantes legenda: ~${restLeg}`;
-      const prefix = cand.margem_folga ? "+" : "";
+      const margemSigned = cand.margem_folga
+        ? Number(cand.margem_corte) || 0
+        : -(Number(cand.margem_corte) || 0);
       const heat = margemHeat(cand);
       const settled = heat === null;
       const valueCls = settled || heat === 0
@@ -609,7 +641,7 @@ function renderPanelData(panelEl, data) {
       if (!settled && heat > 0) {
         margemStyle = ` style="--margem-heat: ${heat.toFixed(3)}"`;
       }
-      margemCell = `<span class="${valueCls}">${prefix}${formatCompact(cand.margem_corte)}</span>`;
+      margemCell = `<span class="${valueCls}">${formatSignedCompact(margemSigned)}</span>`;
     }
 
     tr.innerHTML = `
