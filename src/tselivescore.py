@@ -1,10 +1,16 @@
 import argparse
 from datetime import datetime
-import json
 import os
 from time import sleep
 
 from extras import torequests
+from extras.tse_client import (
+    CARGO_GOVERNADOR,
+    CARGO_PRESIDENTE,
+    build_url,
+    normalize_payload,
+    parse_response,
+)
 
 
 class Candidato:
@@ -139,11 +145,21 @@ class EleicaoStats:
 
 
 class Eleicao:
-    def __init__(self, title: str, url: str, wait_time: int, qtd_printable: int):
+    def __init__(
+        self,
+        title: str,
+        url: str,
+        cargo_cd: str,
+        wait_time: int,
+        qtd_printable: int,
+        tor_enabled: bool,
+    ):
         self.title = title
         self.url = url
+        self.cargo_cd = cargo_cd
         self.wait_time = wait_time
         self.qtd_printable = qtd_printable
+        self.tor_enabled = tor_enabled
         self.eleicao_stats = None
         self.verificador()
 
@@ -153,10 +169,11 @@ class Eleicao:
             sleep(self.wait_time)
 
     def update_eleicao(self):
-        req = torequests.execute(self.url, "GET")
+        req = torequests.execute(self.url, "GET", tor_enabled=self.tor_enabled)
         if req["status"] == "ok":
             try:
-                raw_data = json.loads(req["req"].text)
+                payload = parse_response(req["req"].text)
+                raw_data = normalize_payload(payload, self.cargo_cd)
             except Exception:
                 print(self.eleicao_stats)
                 print(f"({datetime.now()}) Algo deu ruim: {req['req'].text[:100]}")
@@ -189,13 +206,22 @@ if __name__ == "__main__":
     parser.add_argument(
         "--printables", default=5, help="Quantidade de candidatos a exibir.", type=int
     )
+    parser.add_argument(
+        "--no-tor",
+        action="store_true",
+        help="Desabilita o proxy Tor (habilitado por padrão).",
+    )
     args = parser.parse_args()
-    selected_code = args.cod
-    if selected_code == "br":
-        titulo = "Presidência"
-        url = "https://resultados.tse.jus.br/oficial/ele2022/545/dados-simplificados/br/br-c0001-e000545-r.json"
-    else:
-        titulo = f"Governo {selected_code.upper()}"
-        url = f"https://resultados.tse.jus.br/oficial/ele2022/547/dados-simplificados/{selected_code}/{selected_code}-c0003-e000547-r.json"
-    print(f"Iniciando no modo '{titulo}'...")
-    Eleicao(titulo, url, args.wait, args.printables)
+    selected_code = args.cod.lower()
+    titulo, url = build_url(selected_code)
+    cargo_cd = CARGO_PRESIDENTE if selected_code == "br" else CARGO_GOVERNADOR
+    tor_mode = "desabilitado" if args.no_tor else "habilitado"
+    print(f"Iniciando no modo '{titulo}' (Tor {tor_mode})...")
+    Eleicao(
+        titulo,
+        url,
+        cargo_cd,
+        args.wait,
+        args.printables,
+        tor_enabled=not args.no_tor,
+    )

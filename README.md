@@ -2,32 +2,52 @@
 
 Feito na base da pressa extrema. [XGH é vida](https://gohorseprocess.com.br/extreme-go-horse-xgh/).
 
+Acompanha a apuração das Eleições 2026 consumindo os arquivos JWS do TSE.
+
 ## Como executar
 
-Primeiro, dá aquele clone maneiro no repo. Depois, no seu terminal...
+### Docker (recomendado)
 
-### Sem devcontainer
 ```bash
-cd .devcontainer
-docker compose -f docker-compose.yml up
+docker compose build
+docker compose run --rm tselivescore br
 ```
-Depois, para cada apuração que desejar, execute:
+
+Para acompanhar o governo de um estado:
+
 ```bash
-docker exec -it tselivescore bash -c "python /temp/src/tselivescore.py br"
+docker compose run --rm tselivescore sp
 ```
-Pode substituir "br" pela sigla do estado a verificar (e.g. sp).
 
----
+Opções adicionais:
 
-### Com devcontainer
-No VSCode, instale a extensão [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers). 
+```bash
+docker compose run --rm tselivescore br --wait 3 --printables 10
+docker compose run --rm tselivescore br --no-tor   # sem proxy Tor
+```
 
-Depois, aperte F1 e vá para a opção "Dev Containers: Open Folder in Container...".
+O proxy Tor é habilitado por padrão. Use `--no-tor` para requisições diretas ao TSE.
 
-Escolha a pasta do repo clonado.
+### Sem Docker
 
-Vá para o bash via VSCode e insira:
+```bash
+pip install -r src/reqs/requirements-base.txt
+cd src
+python tselivescore.py br --no-tor
+```
+
+### Devcontainer (opcional)
+
+No VS Code ou Cursor, instale a extensão [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers), abra a pasta no container e execute:
+
 ```bash
 cd src
 python tselivescore.py br
 ```
+
+## Cargos suportados
+
+| Argumento | Cargo       | Código eleição TSE |
+|-----------|-------------|--------------------|
+| `br`      | Presidência | 6257               |
+| `<uf>`    | Governador  | 6259               |
