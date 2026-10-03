@@ -98,14 +98,24 @@ def index():
     )
 
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+class NoCacheStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
 
 
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        app,
+        "webapp:app" if DEBUG_ENDPOINTS else app,
         host="0.0.0.0",
         port=int(os.environ.get("PORT", "8080")),
+        reload=DEBUG_ENDPOINTS,
+        reload_dirs=[str(Path(__file__).parent)] if DEBUG_ENDPOINTS else None,
     )
