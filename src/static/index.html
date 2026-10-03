@@ -8,10 +8,22 @@
   </head>
   <body>
     <header class="toolbar">
-      <div class="brand">TSELiveScore</div>
+      <div class="brand">
+        TSELiveScore
+        <span id="live-indicator" class="live-indicator" hidden>ao vivo</span>
+      </div>
       <div class="toolbar-actions">
+        <details class="legend">
+          <summary>Legenda</summary>
+          <dl>
+            <dt>Δ%</dt>
+            <dd>variação do percentual desde a última leitura</dd>
+            <dt>HP</dt>
+            <dd>estimativa de votos para alcançar a zona de classificação</dd>
+          </dl>
+        </details>
         <label>
-          Refresh TSE
+          Atualizar a cada
           <input id="wait-input" type="number" min="5" max="60" value="5" />
           s
         </label>
@@ -55,7 +67,16 @@
             <button class="panel-remove" type="button" title="Remover painel">×</button>
           </div>
         </header>
-        <div class="panel-meta"></div>
+        <div class="panel-meta">
+          <div class="apuracao-row">
+            <span class="apuracao-label"></span>
+            <div class="progress-bar" role="progressbar">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+          <div class="panel-stats"></div>
+          <div class="panel-updated"></div>
+        </div>
         <div class="panel-alert"></div>
         <table class="candidates">
           <thead>
@@ -72,6 +93,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=3"></script>
   </body>
 </html>

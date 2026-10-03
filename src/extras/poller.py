@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass, field
 
 from extras.eleicao import EleicaoStats, fetch_eleicao_stats
+from extras.fixtures import MOCK_ENABLED, fetch_mock_panel, reset_mock_state
 from extras.tse_client import resolve_panel
 
 MIN_WAIT_SECONDS = 5
@@ -65,6 +66,20 @@ class ElectionPoller:
         with self._state.lock:
             self._state.sessions.pop(session_id, None)
 
+    def reset_mock(self):
+        if not MOCK_ENABLED:
+            return
+        reset_mock_state()
+        with self._state.lock:
+            self._state.cache.clear()
+            self._state.prev_stats.clear()
+            self._state.last_tse_poll_at = None
+            self._state.last_tse_poll_panels = []
+            self._state.tse_poll_total = 0
+        panels = self._merged_panels()
+        if panels:
+            self.poll_now(panels)
+
     def get_snapshot_for(self, panels: list[PanelConfig]) -> dict:
         return self._snapshot_for(panels)
 
@@ -103,6 +118,7 @@ class ElectionPoller:
 
         tse_polling_active = bool(merged)
         return {
+            "mock_enabled": MOCK_ENABLED,
             "tse_polling_active": tse_polling_active,
             "active_sessions": len(sessions),
             "sessions": sessions,
@@ -193,6 +209,14 @@ class ElectionPoller:
 
     def _poll_panel(self, panel: PanelConfig):
         panel_key, _, _ = resolve_panel(panel.key)
+        if MOCK_ENABLED:
+            with self._state.lock:
+                prev_cache = self._state.cache.get(panel_key)
+            entry = fetch_mock_panel(panel_key, panel.printables, prev_cache)
+            with self._state.lock:
+                self._state.cache[panel_key] = entry
+            return
+
         with self._state.lock:
             prev = self._state.prev_stats.get(panel_key)
 

@@ -42,12 +42,91 @@ body {
 .brand {
   font-weight: 700;
   letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.live-indicator {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ok);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.live-indicator::before {
+  content: "●";
+  margin-right: 0.25rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.live-indicator.stale {
+  color: var(--muted);
+}
+
+.live-indicator.stale::before {
+  animation: none;
+  color: var(--warn);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .toolbar-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.legend {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.legend summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.legend dl {
+  margin: 0.4rem 0 0;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 220px;
+}
+
+.legend dt {
+  font-weight: 600;
+  color: var(--text);
+  display: inline;
+}
+
+.legend dt::after {
+  content: " — ";
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.legend dd {
+  display: inline;
+  margin: 0;
+}
+
+.legend dd::after {
+  content: "";
+  display: block;
+  margin-bottom: 0.35rem;
 }
 
 label {
@@ -127,14 +206,50 @@ button:hover {
 }
 
 .panel-meta {
-  color: var(--muted);
   margin-bottom: 0.5rem;
-  white-space: pre-line;
+}
+
+.apuracao-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.apuracao-label {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 5.5rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1f6feb, var(--accent));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+
+.panel-stats,
+.panel-updated {
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .panel-alert {
   margin-bottom: 0.5rem;
   color: var(--warn);
+  font-weight: 600;
 }
 
 .panel-alert:empty,
@@ -176,6 +291,77 @@ button:hover {
   border-top: 2px solid var(--border);
 }
 
+.candidates tr.eliminated td {
+  color: #9aa4ad;
+}
+
+.candidates tr.flash-pos td {
+  animation: flash-pos 1.2s ease;
+}
+
+.candidates tr.flash-neg td {
+  animation: flash-neg 1.2s ease;
+}
+
+@keyframes flash-pos {
+  0% {
+    background: #3fb95033;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes flash-neg {
+  0% {
+    background: #f8514933;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.cand-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cand-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+
+.badge-elected {
+  background: #3fb95033;
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+
+.badge-turno {
+  background: #d2992233;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+
+.badge-st {
+  background: #8b949e33;
+  color: var(--muted);
+  border: 1px solid var(--muted);
+}
+
 .delta-pos {
   color: var(--ok);
 }
@@ -196,6 +382,11 @@ button:hover {
 .status-banner.error {
   background: #3a1a1a;
   color: #f0b8b8;
+}
+
+.status-banner.mock {
+  background: #2a2a4a;
+  color: #c8c8f0;
 }
 
 .empty-state {
@@ -240,5 +431,9 @@ dialog form {
   .toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .legend {
+    order: 3;
   }
 }

@@ -3,6 +3,7 @@ const SESSION_KEY = "tselivescore-session-id";
 
 const dashboardEl = document.getElementById("dashboard");
 const statusEl = document.getElementById("status-banner");
+const liveIndicator = document.getElementById("live-indicator");
 const waitInput = document.getElementById("wait-input");
 const addDialog = document.getElementById("add-dialog");
 const addForm = document.getElementById("add-form");
@@ -22,6 +23,7 @@ let meta = {
 let panels = [];
 let heartbeatTimer = null;
 let sessionId = null;
+const prevDeltas = new Map();
 
 function apiUrl(path) {
   return new URL(path, window.location.href).href;
@@ -184,10 +186,33 @@ function formatNumber(value) {
   return new Intl.NumberFormat("pt-BR").format(value ?? 0);
 }
 
+function formatBadges(cand) {
+  const badges = [];
+  if (cand.sf_e === "s") {
+    badges.push('<span class="badge badge-turno">2º turno</span>');
+  } else if (cand.sf_e !== "n" && cand.sf_e) {
+    badges.push('<span class="badge badge-elected">Eleito</span>');
+  }
+  if (cand.sf_st) {
+    badges.push(`<span class="badge badge-st">${cand.sf_st}</span>`);
+  }
+  return badges.length ? `<div class="cand-badges">${badges.join("")}</div>` : "";
+}
+
+function setLiveIndicator(ok) {
+  if (!liveIndicator) return;
+  liveIndicator.hidden = false;
+  liveIndicator.classList.toggle("stale", !ok);
+}
+
 function renderPanelData(panelEl, data) {
-  const metaEl = panelEl.querySelector(".panel-meta");
   const alertEl = panelEl.querySelector(".panel-alert");
   const tbody = panelEl.querySelector("tbody");
+  const apuracaoLabel = panelEl.querySelector(".apuracao-label");
+  const progressFill = panelEl.querySelector(".progress-fill");
+  const progressBar = panelEl.querySelector(".progress-bar");
+  const statsEl = panelEl.querySelector(".panel-stats");
+  const updatedEl = panelEl.querySelector(".panel-updated");
 
   let errorEl = panelEl.querySelector(".panel-error");
   if (!errorEl) {
@@ -197,7 +222,11 @@ function renderPanelData(panelEl, data) {
   }
 
   if (!data) {
-    metaEl.textContent = "Aguardando primeira leitura...";
+    apuracaoLabel.textContent = "Aguardando…";
+    progressFill.style.width = "0%";
+    progressBar.setAttribute("aria-valuenow", "0");
+    statsEl.textContent = "";
+    updatedEl.textContent = "";
     alertEl.textContent = "";
     errorEl.textContent = "";
     tbody.innerHTML = "";
@@ -205,7 +234,10 @@ function renderPanelData(panelEl, data) {
   }
 
   if (data.error) {
-    metaEl.textContent = "";
+    apuracaoLabel.textContent = "";
+    progressFill.style.width = "0%";
+    statsEl.textContent = "";
+    updatedEl.textContent = "";
     alertEl.textContent = "";
     errorEl.textContent = data.error;
     tbody.innerHTML = "";
@@ -215,49 +247,66 @@ function renderPanelData(panelEl, data) {
   errorEl.textContent = "";
   panelEl.querySelector(".panel-title").textContent = data.title || panelLabel(data.key);
 
-  const lines = [`${data.perc_sec_totalizadas}% apurado`];
+  const pct = Number(data.perc_sec_totalizadas) || 0;
+  apuracaoLabel.textContent = `${pct}% apurado`;
+  progressFill.style.width = `${pct}%`;
+  progressBar.setAttribute("aria-valuenow", String(pct));
+  progressBar.setAttribute("aria-valuemin", "0");
+  progressBar.setAttribute("aria-valuemax", "100");
+
   if (data.apuracao_iniciada) {
-    lines.push(
-      `Comparecimento: ${data.perc_comparecimento}% | Votos restantes: ~${formatNumber(data.aprox_votos_restantes)}`
-    );
+    statsEl.textContent = `Comparecimento: ${data.perc_comparecimento}% · Votos restantes: ~${formatNumber(data.aprox_votos_restantes)}`;
   } else {
-    lines.push("Apuração ainda não iniciada.");
+    statsEl.textContent = "Apuração ainda não iniciada.";
   }
+
   if (data.latest_update_tse) {
     const delay = data.tse_delay_human || `${data.tse_delay_seconds}s`;
-    lines.push(
-      `Atualizado: ${new Date(data.latest_update_tse).toLocaleString("pt-BR")} (há ${delay})`
-    );
+    updatedEl.textContent = `Atualizado: ${new Date(data.latest_update_tse).toLocaleString("pt-BR")} (há ${delay})`;
+  } else {
+    updatedEl.textContent = "";
   }
-  metaEl.textContent = lines.join("\n");
+
   alertEl.textContent = data.mat_def_label
     ? `Matematicamente definido: ${data.mat_def_label}`
     : "";
 
   tbody.innerHTML = "";
   const qtdVagas = Number(data.qtd_vagas) || 1;
+  const panelId = panelEl.dataset.id;
   data.candidatos?.forEach((cand, idx) => {
     const tr = document.createElement("tr");
     if (cand.sf_e === "s") tr.classList.add("turno");
     if (cand.sf_e !== "n" && cand.sf_e !== "s") tr.classList.add("elected");
     if (idx === qtdVagas) tr.classList.add("cutoff");
+    const hasHp = cand.hp != null && cand.hp >= 0;
+    if (idx >= qtdVagas && !hasHp) tr.classList.add("eliminated");
+
+    const deltaKey = `${panelId}:${cand.nome}`;
+    const prevDelta = prevDeltas.get(deltaKey);
+    if (cand.delta_perc != null && prevDelta !== undefined && cand.delta_perc !== prevDelta) {
+      tr.classList.add(cand.delta_perc > prevDelta ? "flash-pos" : "flash-neg");
+    }
+    if (cand.delta_perc != null) {
+      prevDeltas.set(deltaKey, cand.delta_perc);
+    }
 
     const deltaCell =
       cand.delta_perc == null
         ? ""
         : `<span class="${cand.delta_perc > 0 ? "delta-pos" : "delta-neg"}">${cand.delta_perc > 0 ? "+" : ""}${cand.delta_perc.toFixed(2)}%</span>`;
 
-    const flags = [];
-    if (cand.sf_e !== "n") flags.push(`E:${cand.sf_e}`);
-    if (cand.sf_st) flags.push(`ST:${cand.sf_st}`);
-    const nome = flags.length ? `${flags.join(" ")} ${cand.nome}` : cand.nome;
-
     tr.innerHTML = `
-      <td>${nome}</td>
+      <td>
+        <div class="cand-name">
+          <span>${cand.nome}</span>
+          ${formatBadges(cand)}
+        </div>
+      </td>
       <td>${formatNumber(cand.qtd_votos)}</td>
       <td>${cand.perc_votos}%</td>
       <td>${deltaCell}</td>
-      <td>${cand.hp != null && cand.hp >= 0 ? formatNumber(cand.hp) : ""}</td>
+      <td>${hasHp ? formatNumber(cand.hp) : ""}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -287,10 +336,15 @@ async function sendHeartbeat() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      setLiveIndicator(false);
+      return;
+    }
+    setLiveIndicator(true);
     renderDashboardData(await res.json());
   } catch (err) {
     console.error(err);
+    setLiveIndicator(false);
   }
 }
 
@@ -343,6 +397,10 @@ async function init() {
   fillCategorySelect();
   loadState();
   renderPanels();
+  if (meta.mock) {
+    setStatus("Modo simulação — dados fictícios com apuração progressiva");
+    statusEl?.classList.add("mock");
+  }
   await sendHeartbeat();
   scheduleHeartbeat();
 }

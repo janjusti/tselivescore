@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
+from extras.fixtures import MOCK_ENABLED
 from extras.poller import MIN_WAIT_SECONDS, SESSION_TTL_SECONDS, ElectionPoller, PanelConfig
 from extras.ratelimit import build_rate_limiter, client_ip
 from extras.tse_client import UFS, dashboard_categories, resolve_panel
@@ -60,6 +61,7 @@ def meta():
         "default_wait": DEFAULT_WAIT,
         "min_wait": MIN_WAIT_SECONDS,
         "session_ttl_seconds": SESSION_TTL_SECONDS,
+        "mock": MOCK_ENABLED,
     }
 
 
@@ -88,6 +90,14 @@ def status():
     if not DEBUG_ENDPOINTS:
         raise HTTPException(status_code=404)
     return poller.debug_status()
+
+
+@app.post("/api/mock/reset")
+def reset_mock():
+    if not DEBUG_ENDPOINTS or not MOCK_ENABLED:
+        raise HTTPException(status_code=404)
+    poller.reset_mock()
+    return Response(status_code=204)
 
 
 @app.get("/")
