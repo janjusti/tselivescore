@@ -7,7 +7,8 @@ Acompanha a apuração das Eleições 2026 consumindo os arquivos JWS do TSE —
 ## Dashboard (recomendado)
 
 ```bash
-docker compose up --build
+docker compose up --build                              # desenvolvimento local (padrão; hot reload)
+docker compose --profile prod up --build tselivescore-prod  # produção (imagem fixa, sem porta exposta)
 ```
 
 Abra [http://localhost:8080](http://localhost:8080).
