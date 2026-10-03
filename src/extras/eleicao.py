@@ -1,8 +1,10 @@
 from datetime import datetime
 
 from extras import torequests
+from extras.proporcional import apply_proporcional
 from extras.tse_client import (
     CARGOS_MAJORITARIOS,
+    CARGOS_PROPORCIONAIS,
     build_url,
     normalize_payload,
     parse_response,
@@ -102,6 +104,18 @@ class Candidato:
         self.prev_perc_votos = prev_perc_votos
         self.distancia_votos = None
         self.viavel = None
+        self.agr_id = None
+        self.par_sg = None
+        self.posicao_partido = None
+        self.posicao_legenda = None
+        self.cadeiras_proj = None
+        self.dentro_proj = None
+        self.legenda_sigla = None
+        self.garantido = False
+        self.eliminado_mat = False
+        self.margem_corte = None
+        self.margem_folga = None
+        self.restantes_legenda = None
 
     def __gt__(self, other):
         return self.perc_votos < other.perc_votos
@@ -117,6 +131,16 @@ class Candidato:
             "sf_st": self.sf_st,
             "distancia_votos": self.distancia_votos,
             "viavel": self.viavel,
+            "partido_sg": self.par_sg,
+            "posicao_partido": self.posicao_partido,
+            "cadeiras_proj": self.cadeiras_proj,
+            "dentro_proj": self.dentro_proj,
+            "legenda_sigla": self.legenda_sigla,
+            "garantido": self.garantido,
+            "eliminado_mat": self.eliminado_mat,
+            "margem_corte": self.margem_corte,
+            "margem_folga": self.margem_folga,
+            "restantes_legenda": self.restantes_legenda,
         }
 
 
@@ -137,6 +161,7 @@ class EleicaoStats:
         self._filter_data()
         self._calc_aprox_votos_restantes()
         self._calc_distancia()
+        self._calc_proporcional()
         self._infer_mat_def()
 
     def get_stat(self, key: str, custom_base: dict = None):
@@ -160,8 +185,9 @@ class EleicaoStats:
             return None
 
     def _filter_data(self):
-        self.candidatos = [
-            Candidato(
+        self.candidatos = []
+        for cand in self.get_stat("cand"):
+            item = Candidato(
                 self.get_stat("nm", cand),
                 self.get_stat("vap", cand),
                 self.get_stat("pvap", cand),
@@ -176,9 +202,13 @@ class EleicaoStats:
                     self.get_stat("pvap", cand),
                 ),
             )
-            for cand in self.get_stat("cand")
-        ]
-        self.candidatos.sort()
+            item.agr_id = cand.get("_agr_id") or cand.get("agr_id")
+            item.par_sg = cand.get("_par_sg") or cand.get("par_sg")
+            self.candidatos.append(item)
+        self._agr_list = self.get_stat("agr") or []
+        _, _, self.cargo_cd = resolve_panel(self._panel_key)
+        if self.cargo_cd not in CARGOS_PROPORCIONAIS:
+            self.candidatos.sort()
         self.qtd_vagas = self.get_stat("v")
         self.eleitorado = self.get_stat("e")
         self.qtd_sec_totalizadas = self.get_stat("st")
@@ -187,8 +217,20 @@ class EleicaoStats:
         self.latest_update_tse = self._gen_update_dt()
         self.mat_def = self.get_stat("md")
         self.qtd_votos_validos = self.get_stat("vv")
-        _, _, self.cargo_cd = resolve_panel(self._panel_key)
         self.majoritario = self.cargo_cd in CARGOS_MAJORITARIOS
+        self.proporcional = self.cargo_cd in CARGOS_PROPORCIONAIS
+        self.legendas_resumo = []
+
+    def _calc_proporcional(self):
+        if not self.proporcional or not self.candidatos:
+            return
+        self.legendas_resumo = apply_proporcional(
+            self.candidatos,
+            self._agr_list,
+            int(self.qtd_vagas or 0),
+            int(self.qtd_votos_validos or 0),
+            self.aprox_votos_restantes,
+        )
 
     def _calc_aprox_votos_restantes(self):
         self.perc_comparecimento = self.get_stat("pc")
@@ -257,6 +299,8 @@ class EleicaoStats:
             "mat_def": self.mat_def,
             "mat_def_label": mat_labels.get(self.mat_def),
             "majoritario": self.majoritario,
+            "proporcional": self.proporcional,
+            "legendas_resumo": self.legendas_resumo,
             "qtd_vagas": self.qtd_vagas,
             "candidatos": [c.to_dict() for c in filtered],
             "updated_at": datetime.now().isoformat(),

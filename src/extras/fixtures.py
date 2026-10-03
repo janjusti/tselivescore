@@ -7,6 +7,7 @@ from extras.eleicao import (
     format_duration,
     infer_mat_def_majoritario,
 )
+from extras.proporcional import apply_proporcional
 from extras.tse_client import CARGOS_MAJORITARIOS, panel_title, resolve_panel
 
 MOCK_ENABLED = os.environ.get("TSELIVESCORE_MOCK", "").lower() in ("1", "true", "yes")
@@ -38,9 +39,39 @@ def _scenario(panel_key: str) -> dict:
     if cargo in ("6", "7", "8"):
         return {
             "qtd_vagas": 8,
-            "candidates": [
-                {"nome": f"Dep. {i + 1}", "share": 0.12 - i * 0.01, "drift": 0.0005, "sf_e": "n"}
-                for i in range(12)
+            "parties": [
+                {
+                    "sg": "PL",
+                    "deps": [
+                        {"nome": "Dep. PL 1", "share": 0.058, "drift": 0.00025},
+                        {"nome": "Dep. PL 2", "share": 0.054, "drift": -0.00015},
+                        {"nome": "Dep. PL 3", "share": 0.052, "drift": 0.0001},
+                        {"nome": "Dep. PL 4", "share": 0.046, "drift": -0.00005},
+                    ],
+                },
+                {
+                    "sg": "PT",
+                    "deps": [
+                        {"nome": "Dep. PT 1", "share": 0.066, "drift": 0.0002},
+                        {"nome": "Dep. PT 2", "share": 0.062, "drift": -0.0001},
+                        {"nome": "Dep. PT 3", "share": 0.062, "drift": 0.00015},
+                    ],
+                },
+                {
+                    "sg": "UNIÃO",
+                    "deps": [
+                        {"nome": "Dep. UNIÃO 1", "share": 0.060, "drift": 0.00018},
+                        {"nome": "Dep. UNIÃO 2", "share": 0.057, "drift": -0.00012},
+                        {"nome": "Dep. UNIÃO 3", "share": 0.053, "drift": 0.00008},
+                    ],
+                },
+                {
+                    "sg": "PSD",
+                    "deps": [
+                        {"nome": "Dep. PSD 1", "share": 0.078, "drift": 0.0001},
+                        {"nome": "Dep. PSD 2", "share": 0.072, "drift": -0.0002},
+                    ],
+                },
             ],
         }
     return {
@@ -100,31 +131,81 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
 
         prev_perc_map = dict(state["prev_perc"])
         candidatos = []
-        for spec in scenario["candidates"]:
-            drift = spec["drift"] * tick
-            perc = max(0.1, (spec["share"] + drift) * 100)
-            qtd_votos = int(vv * perc / 100) if perc_apurado > 0 else 0
-            prev_p = prev_perc_map.get(spec["nome"], perc if perc_apurado > 0 else 0)
-            delta = round(perc - prev_p, 2) if perc_apurado > 0 else None
-            if delta == 0:
-                delta = None
-            candidatos.append(
-                {
-                    "nome": spec["nome"],
-                    "qtd_votos": qtd_votos,
-                    "perc_votos": round(perc, 2),
-                    "delta_perc": delta,
-                    "sf_e": spec["sf_e"],
-                    "sf_st": "",
-                    "distancia_votos": None,
-                    "viavel": None,
-                }
-            )
-            state["prev_perc"][spec["nome"]] = perc
+        agr_list = []
+        if "parties" in scenario:
+            for party in scenario["parties"]:
+                agr_id = party["sg"]
+                agr_list.append(
+                    {
+                        "nm": agr_id,
+                        "tp": "i",
+                        "par": [{"sg": party["sg"], "tvan": "0", "cand": []}],
+                    }
+                )
+                party_votes = 0
+                for dep in party["deps"]:
+                    share = max(0.001, dep["share"] + dep.get("drift", 0) * tick)
+                    perc = max(0.05, share * 100)
+                    qtd_votos = int(vv * share) if perc_apurado > 0 else 0
+                    party_votes += qtd_votos
+                    candidatos.append(
+                        {
+                            "nome": dep["nome"],
+                            "qtd_votos": qtd_votos,
+                            "perc_votos": round(perc, 2),
+                            "delta_perc": None,
+                            "garantido": False,
+                            "eliminado_mat": False,
+                            "margem_corte": None,
+                            "margem_folga": None,
+                            "restantes_legenda": None,
+                            "sf_e": "n",
+                            "sf_st": "",
+                            "distancia_votos": None,
+                            "viavel": None,
+                            "agr_id": agr_id,
+                            "par_sg": party["sg"],
+                        }
+                    )
+                agr_list[-1]["par"][0]["tvan"] = str(party_votes)
+        else:
+            for spec in scenario["candidates"]:
+                drift = spec["drift"] * tick
+                perc = max(0.1, (spec["share"] + drift) * 100)
+                qtd_votos = int(vv * perc / 100) if perc_apurado > 0 else 0
+                prev_p = prev_perc_map.get(spec["nome"], perc if perc_apurado > 0 else 0)
+                delta = round(perc - prev_p, 2) if perc_apurado > 0 else None
+                if delta == 0:
+                    delta = None
+                candidatos.append(
+                    {
+                        "nome": spec["nome"],
+                        "qtd_votos": qtd_votos,
+                        "perc_votos": round(perc, 2),
+                        "delta_perc": delta,
+                        "sf_e": spec["sf_e"],
+                        "sf_st": "",
+                        "distancia_votos": None,
+                        "viavel": None,
+                    }
+                )
+                state["prev_perc"][spec["nome"]] = perc
 
-        candidatos.sort(key=lambda c: c["perc_votos"], reverse=True)
+        proporcional = cargo in ("6", "7", "8")
+        if not proporcional:
+            candidatos.sort(key=lambda c: c["perc_votos"], reverse=True)
         qtd_vagas = scenario["qtd_vagas"]
         _calc_distancia(candidatos, qtd_vagas, aprox_votos_restantes, majoritario)
+
+        legendas_resumo = []
+        if proporcional and agr_list:
+            legendas_resumo = apply_proporcional(
+                candidatos,
+                agr_list,
+                qtd_vagas,
+                vv if perc_apurado > 0 else 0,
+                aprox_votos_restantes,
+            )
 
         mat_def, mat_def_label = "", None
         if majoritario:
@@ -152,6 +233,8 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
             "mat_def": mat_def,
             "mat_def_label": mat_def_label,
             "majoritario": majoritario,
+            "proporcional": proporcional,
+            "legendas_resumo": legendas_resumo,
             "qtd_vagas": qtd_vagas,
             "candidatos": candidatos[:printables],
             "updated_at": now.isoformat(),

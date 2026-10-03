@@ -289,8 +289,16 @@ button:hover {
   width: 4.5rem;
 }
 
+.candidates col.col-margem {
+  width: 4.5rem;
+}
+
 .candidates.no-dist col.col-name {
-  width: 52%;
+  width: 40%;
+}
+
+.candidates.no-dist.no-delta col.col-name {
+  width: 38%;
 }
 
 .candidates.no-dist col.col-num {
@@ -306,6 +314,10 @@ button:hover {
 }
 
 .candidates.no-dist col.col-dist {
+  width: 0;
+}
+
+.candidates.no-margem col.col-margem {
   width: 0;
 }
 
@@ -335,16 +347,17 @@ button:hover {
 .candidates .col-num,
 .candidates .col-pct,
 .candidates .col-delta,
-.candidates .col-dist {
+.candidates .col-dist,
+.candidates .col-margem {
   white-space: nowrap;
   text-align: right;
   font-variant-numeric: tabular-nums;
   padding-left: 0.5rem;
 }
 
-.candidates tr.eliminated .dist-value {
+.candidates tr.eliminated .dist-value,
+.candidates tr.eliminated .margem-value {
   text-decoration: line-through;
-  opacity: 0.7;
 }
 
 .candidates tr.elected {
@@ -360,12 +373,40 @@ button:hover {
 }
 
 .candidates tr.eliminated td {
-  color: #9aa4ad;
+  color: #6e7681;
+  opacity: 0.55;
+}
+
+.candidates tr.eliminated .cand-name > span:first-child,
+.candidates tr.eliminated .cand-subtitle {
+  text-decoration: line-through;
 }
 
 .candidates.no-dist .dist-header,
 .candidates.no-dist .dist-cell {
   display: none;
+}
+
+.candidates.no-delta .col-delta {
+  display: none;
+}
+
+.candidates.no-margem .margem-header,
+.candidates.no-margem .margem-cell {
+  display: none;
+}
+
+.margem-folga {
+  color: var(--ok);
+}
+
+.margem-deficit {
+  color: var(--warn);
+}
+
+.candidates tr.eliminated .margem-deficit,
+.candidates tr.eliminated .margem-folga {
+  color: inherit;
 }
 
 .candidates tr.flash-pos td {
@@ -400,6 +441,12 @@ button:hover {
   gap: 0.15rem;
 }
 
+.cand-subtitle {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
 .cand-badges {
   display: flex;
   flex-wrap: wrap;
@@ -421,6 +468,12 @@ button:hover {
   background: #3fb95033;
   color: var(--ok);
   border: 1px solid var(--ok);
+}
+
+.badge-elected-mat {
+  background: #3fb95022;
+  color: #7ee787;
+  border: 1px solid #3fb95088;
 }
 
 .badge-turno {

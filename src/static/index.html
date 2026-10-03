@@ -16,10 +16,16 @@
         <details class="legend">
           <summary>Legenda</summary>
           <dl>
+            <dt>Eleito / eliminado (mat.)</dt>
+            <dd>garantido ou eliminado quando a folga de votos supera o restante da legenda</dd>
             <dt>Δ%</dt>
-            <dd>variação do percentual desde a última leitura</dd>
+            <dd>variação do percentual desde a última leitura (majoritário)</dd>
             <dt>Dist.</dt>
             <dd>atraso em votos até o líder; se Dist. &gt; Restantes, eliminado matematicamente</dd>
+            <dt>Legenda</dt>
+            <dd>partido e posição na legenda, ex. UNIÃO · 2º/2 (proporcional)</dd>
+            <dt>Folga</dt>
+            <dd>folga (+) ou déficit em votos até o corte da legenda (proporcional)</dd>
           </dl>
         </details>
         <label>
@@ -85,6 +91,7 @@
             <col class="col-pct" />
             <col class="col-delta" />
             <col class="col-dist" />
+            <col class="col-margem" />
           </colgroup>
           <thead>
             <tr>
@@ -93,6 +100,7 @@
               <th class="col-pct">%</th>
               <th class="col-delta">Δ%</th>
               <th class="col-dist dist-header">Dist.</th>
+              <th class="col-margem margem-header">Folga</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -100,6 +108,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=9"></script>
+    <script src="/static/app.js?v=15"></script>
   </body>
 </html>

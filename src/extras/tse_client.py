@@ -22,6 +22,7 @@ CARGO_LABELS = {
 }
 
 CARGOS_MAJORITARIOS = {CARGO_PRESIDENTE, CARGO_GOVERNADOR}
+CARGOS_PROPORCIONAIS = {CARGO_DEP_FEDERAL, CARGO_DEP_ESTADUAL, CARGO_DEP_DISTRITAL}
 
 UFS = [
     "ac", "al", "am", "ap", "ba", "ce", "df", "es", "go", "ma", "mg", "ms", "mt",
@@ -48,12 +49,16 @@ def parse_response(text: str) -> dict:
 def extract_candidatos(cargo: dict) -> list:
     candidatos = []
     for agr in cargo.get("agr", []):
+        agr_id = agr.get("nm") or agr.get("n") or ""
         for partido in agr.get("par", []):
+            par_sg = partido.get("sg", "")
             for cand in partido.get("cand", []):
                 candidatos.append(
                     {
                         **cand,
                         "nm": cand.get("nmu") or cand.get("nm", ""),
+                        "_agr_id": agr_id,
+                        "_par_sg": par_sg,
                     }
                 )
     return candidatos
@@ -69,6 +74,7 @@ def normalize_payload(payload: dict, cargo_cd: str) -> dict:
 
     return {
         "cand": extract_candidatos(cargo),
+        "agr": cargo.get("agr", []),
         "st": payload["s"]["st"],
         "pst": payload["s"]["pst"],
         "psnt": payload["s"]["psnt"],

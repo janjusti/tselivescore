@@ -43,6 +43,20 @@ def format_cli(stats: EleicaoStats, qtd_printable: int) -> str:
             s += f" [Dist: {cand.distancia_votos:,}]"
             if cand.viavel is False:
                 s += " (eliminado)"
+        elif stats.proporcional and cand.par_sg and cand.posicao_partido is not None:
+            s += f" [{cand.par_sg} {cand.posicao_partido}º"
+            if cand.cadeiras_proj is not None:
+                s += f", {cand.cadeiras_proj} proj."
+            if cand.garantido:
+                s += ", garantido"
+            elif cand.eliminado_mat:
+                s += ", eliminado"
+            elif cand.dentro_proj is False:
+                s += ", fora"
+            if cand.margem_corte is not None:
+                sign = "+" if cand.margem_folga else "-"
+                s += f", margem {sign}{cand.margem_corte:,}"
+            s += "]"
         s += "\n"
     return s
 

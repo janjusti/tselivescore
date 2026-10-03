@@ -221,10 +221,24 @@ function formatTseTimestamp(isoString) {
   });
 }
 
+function formatCandSubtitle(cand) {
+  if (!cand.partido_sg || cand.posicao_partido == null) return "";
+  const pos = `${cand.posicao_partido}º`;
+  const cadeiras = cand.cadeiras_proj > 0 ? `/${cand.cadeiras_proj}` : "";
+  return `<div class="cand-subtitle">${cand.partido_sg} · ${pos}${cadeiras}</div>`;
+}
+
+function formatLegendasResumo(legendas) {
+  if (!legendas?.length) return "";
+  return legendas.map((l) => `${l.sigla} ${l.cadeiras}`).join(" · ");
+}
+
 function formatBadges(cand) {
   const badges = [];
   if (cand.sf_e === "s") {
     badges.push('<span class="badge badge-turno">2º turno</span>');
+  } else if (cand.garantido) {
+    badges.push('<span class="badge badge-elected-mat">Eleito (mat.)</span>');
   } else if (cand.sf_e !== "n" && cand.sf_e) {
     badges.push('<span class="badge badge-elected">Eleito</span>');
   }
@@ -283,6 +297,7 @@ function renderPanelData(panelEl, data) {
   panelEl.querySelector(".panel-title").textContent = data.title || panelLabel(data.key);
 
   const isMajoritario = Boolean(data.majoritario);
+  const isProporcional = Boolean(data.proporcional);
   const pct = Number(data.perc_sec_totalizadas) || 0;
   apuracaoLabel.textContent = `${pct}% apurado`;
   progressFill.style.width = `${pct}%`;
@@ -295,6 +310,9 @@ function renderPanelData(panelEl, data) {
     const restantes = Number(data.aprox_votos_restantes) || 0;
     if (pct < 100 && restantes > 0) {
       stats += ` · Restantes: ~${formatCompact(restantes)}`;
+    }
+    if (isProporcional && data.legendas_resumo?.length) {
+      stats += ` · ${formatLegendasResumo(data.legendas_resumo)}`;
     }
     statsEl.textContent = stats;
   } else {
@@ -312,7 +330,10 @@ function renderPanelData(panelEl, data) {
     ? `Matematicamente definido: ${data.mat_def_label}`
     : "";
 
-  panelEl.querySelector(".candidates")?.classList.toggle("no-dist", !isMajoritario);
+  const candidatesTable = panelEl.querySelector(".candidates");
+  candidatesTable?.classList.toggle("no-dist", !isMajoritario);
+  candidatesTable?.classList.toggle("no-margem", !isProporcional);
+  candidatesTable?.classList.toggle("no-delta", isProporcional);
   const restantesFull = formatNumber(data.aprox_votos_restantes);
 
   tbody.innerHTML = "";
@@ -321,25 +342,29 @@ function renderPanelData(panelEl, data) {
   data.candidatos?.forEach((cand, idx) => {
     const tr = document.createElement("tr");
     if (cand.sf_e === "s") tr.classList.add("turno");
-    if (cand.sf_e !== "n" && cand.sf_e !== "s") tr.classList.add("elected");
-    if (idx === qtdVagas) tr.classList.add("cutoff");
+    if (cand.garantido || (cand.sf_e !== "n" && cand.sf_e !== "s")) tr.classList.add("elected");
+    if (isMajoritario && idx === qtdVagas) tr.classList.add("cutoff");
     const belowCutoff = idx >= qtdVagas;
-    const eliminado = isMajoritario && belowCutoff && cand.viavel === false;
+    const eliminado =
+      (isMajoritario && belowCutoff && cand.viavel === false) ||
+      (isProporcional && cand.sf_e === "n" && cand.eliminado_mat === true);
     if (eliminado) tr.classList.add("eliminated");
 
-    const deltaKey = `${panelId}:${cand.nome}`;
-    const prevDelta = prevDeltas.get(deltaKey);
-    if (cand.delta_perc != null && prevDelta !== undefined && cand.delta_perc !== prevDelta) {
-      tr.classList.add(cand.delta_perc > prevDelta ? "flash-pos" : "flash-neg");
-    }
-    if (cand.delta_perc != null) {
-      prevDeltas.set(deltaKey, cand.delta_perc);
+    if (!isProporcional) {
+      const deltaKey = `${panelId}:${cand.nome}`;
+      const prevDelta = prevDeltas.get(deltaKey);
+      if (cand.delta_perc != null && prevDelta !== undefined && cand.delta_perc !== prevDelta) {
+        tr.classList.add(cand.delta_perc > prevDelta ? "flash-pos" : "flash-neg");
+      }
+      if (cand.delta_perc != null) {
+        prevDeltas.set(deltaKey, cand.delta_perc);
+      }
     }
 
     const deltaCell =
-      cand.delta_perc == null
-        ? ""
-        : `<span class="${cand.delta_perc > 0 ? "delta-pos" : "delta-neg"}">${cand.delta_perc > 0 ? "+" : ""}${cand.delta_perc.toFixed(2)}%</span>`;
+      !isProporcional && cand.delta_perc != null
+        ? `<span class="${cand.delta_perc > 0 ? "delta-pos" : "delta-neg"}">${cand.delta_perc > 0 ? "+" : ""}${cand.delta_perc.toFixed(2)}%</span>`
+        : "";
 
     const distTitle =
       isMajoritario && cand.distancia_votos != null
@@ -352,10 +377,22 @@ function renderPanelData(panelEl, data) {
         ? `<span class="dist-value">${formatCompact(cand.distancia_votos)}</span>`
         : "";
 
+    let margemTitle = "";
+    let margemCell = "";
+    if (isProporcional && cand.margem_corte != null) {
+      const restLeg = formatNumber(cand.restantes_legenda);
+      const tipo = cand.margem_folga ? "Folga" : "Déficit";
+      margemTitle = `${tipo}: ${formatNumber(cand.margem_corte)} · Restantes legenda: ~${restLeg}`;
+      const cls = cand.margem_folga ? "margem-folga" : "margem-deficit";
+      const prefix = cand.margem_folga ? "+" : "";
+      margemCell = `<span class="margem-value ${cls}">${prefix}${formatCompact(cand.margem_corte)}</span>`;
+    }
+
     tr.innerHTML = `
       <td class="col-name">
         <div class="cand-name">
           <span>${cand.nome}</span>
+          ${formatCandSubtitle(cand)}
           ${formatBadges(cand)}
         </div>
       </td>
@@ -363,6 +400,7 @@ function renderPanelData(panelEl, data) {
       <td class="col-pct">${formatPerc(cand.perc_votos)}</td>
       <td class="col-delta">${deltaCell}</td>
       <td class="col-dist dist-cell" title="${distTitle}">${distCell}</td>
+      <td class="col-margem margem-cell" title="${margemTitle}">${margemCell}</td>
     `;
     tbody.appendChild(tr);
   });
