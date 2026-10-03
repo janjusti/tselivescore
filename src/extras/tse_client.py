@@ -21,6 +21,8 @@ CARGO_LABELS = {
     CARGO_DEP_DISTRITAL: "Deputado Distrital",
 }
 
+CARGOS_MAJORITARIOS = {CARGO_PRESIDENTE, CARGO_GOVERNADOR}
+
 UFS = [
     "ac", "al", "am", "ap", "ba", "ce", "df", "es", "go", "ma", "mg", "ms", "mt",
     "pa", "pb", "pe", "pi", "pr", "rj", "rn", "ro", "rr", "rs", "sc", "se", "sp",

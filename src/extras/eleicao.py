@@ -1,7 +1,13 @@
 from datetime import datetime
 
 from extras import torequests
-from extras.tse_client import build_url, normalize_payload, parse_response, resolve_panel
+from extras.tse_client import (
+    CARGOS_MAJORITARIOS,
+    build_url,
+    normalize_payload,
+    parse_response,
+    resolve_panel,
+)
 
 
 def format_duration(seconds: int | float | None) -> str | None:
@@ -22,6 +28,62 @@ def format_duration(seconds: int | float | None) -> str | None:
     return f"{secs}s"
 
 
+def _cand_votos(cand) -> int:
+    return cand.qtd_votos if hasattr(cand, "qtd_votos") else cand["qtd_votos"]
+
+
+def _cand_perc(cand) -> float:
+    return cand.perc_votos if hasattr(cand, "perc_votos") else cand["perc_votos"]
+
+
+def infer_mat_def_majoritario(candidatos, aprox_votos_restantes) -> tuple[str, str | None]:
+    if not candidatos or len(candidatos) < 2:
+        return "", None
+
+    restantes = max(0, int(aprox_votos_restantes or 0))
+    leader, second = candidatos[0], candidatos[1]
+    gap_lider_2o = _cand_votos(leader) - _cand_votos(second)
+    segundo_nao_alcanca = gap_lider_2o > restantes
+
+    if _cand_perc(leader) > 50 and segundo_nao_alcanca:
+        return "E", "Eleito"
+
+    if len(candidatos) >= 3:
+        third = candidatos[2]
+        gap_2o_3o = _cand_votos(second) - _cand_votos(third)
+        terceiro_nao_alcanca = gap_2o_3o > restantes
+        perc_lider = _cand_perc(leader)
+        if terceiro_nao_alcanca and perc_lider > 0:
+            vv = int(_cand_votos(leader) * 100 / perc_lider)
+            if vv > 0:
+                max_perc_lider = (_cand_votos(leader) + restantes) * 100 / (vv + restantes)
+                if max_perc_lider < 50:
+                    return "S", "Segundo turno"
+
+    return "", None
+
+
+def apply_mat_def_majoritario(candidatos, mat_def: str) -> str:
+    if not candidatos or not mat_def:
+        return mat_def
+    leader = candidatos[0]
+    if mat_def == "E":
+        sf_e = leader.sf_e if hasattr(leader, "sf_e") else leader["sf_e"]
+        if sf_e in ("n", "", None):
+            if hasattr(leader, "sf_e"):
+                leader.sf_e = "e"
+            else:
+                leader["sf_e"] = "e"
+    elif mat_def == "S":
+        sf_e = leader.sf_e if hasattr(leader, "sf_e") else leader["sf_e"]
+        if sf_e in ("n", "", None):
+            if hasattr(leader, "sf_e"):
+                leader.sf_e = "s"
+            else:
+                leader["sf_e"] = "s"
+    return mat_def
+
+
 class Candidato:
     def __init__(
         self,
@@ -38,7 +100,8 @@ class Candidato:
         self.sf_e = sf_e
         self.sf_st = sf_st
         self.prev_perc_votos = prev_perc_votos
-        self.hp = None
+        self.distancia_votos = None
+        self.viavel = None
 
     def __gt__(self, other):
         return self.perc_votos < other.perc_votos
@@ -52,7 +115,8 @@ class Candidato:
             "delta_perc": delta if delta != 0 else None,
             "sf_e": self.sf_e,
             "sf_st": self.sf_st,
-            "hp": self.hp,
+            "distancia_votos": self.distancia_votos,
+            "viavel": self.viavel,
         }
 
 
@@ -71,7 +135,9 @@ class EleicaoStats:
         self._title = title
         self._panel_key = panel_key
         self._filter_data()
-        self._calc_hp()
+        self._calc_aprox_votos_restantes()
+        self._calc_distancia()
+        self._infer_mat_def()
 
     def get_stat(self, key: str, custom_base: dict = None):
         base = self._raw_data if custom_base is None else custom_base
@@ -121,25 +187,46 @@ class EleicaoStats:
         self.latest_update_tse = self._gen_update_dt()
         self.mat_def = self.get_stat("md")
         self.qtd_votos_validos = self.get_stat("vv")
+        _, _, self.cargo_cd = resolve_panel(self._panel_key)
+        self.majoritario = self.cargo_cd in CARGOS_MAJORITARIOS
 
-    def _calc_hp(self):
+    def _calc_aprox_votos_restantes(self):
         self.perc_comparecimento = self.get_stat("pc")
-        self.perc_voto_valido = self.get_stat("pvv")
-        self.aprox_vv_hipot = int(
-            self.perc_comparecimento
-            / 100
-            * self.perc_voto_valido
-            / 100
-            * self.eleitorado
-        )
-        self.aprox_votos_restantes = int(
-            self.aprox_vv_hipot * self.perc_sec_pendentes / 100
-        )
-        if not self.candidatos or not self.qtd_vagas:
+        if self.perc_sec_totalizadas and self.qtd_votos_validos:
+            self.aprox_votos_restantes = int(
+                self.qtd_votos_validos
+                * self.perc_sec_pendentes
+                / self.perc_sec_totalizadas
+            )
+        else:
+            perc_voto_valido = self.get_stat("pvv")
+            aprox_vv = int(
+                self.perc_comparecimento
+                / 100
+                * perc_voto_valido
+                / 100
+                * self.eleitorado
+            )
+            self.aprox_votos_restantes = int(
+                aprox_vv * self.perc_sec_pendentes / 100
+            )
+
+    def _calc_distancia(self):
+        if not self.majoritario or not self.candidatos or not self.qtd_vagas:
             return
         cand_lim = self.candidatos[self.qtd_vagas - 1]
         for cand in self.candidatos[self.qtd_vagas :]:
-            cand.hp = (cand.qtd_votos - cand_lim.qtd_votos) + self.aprox_votos_restantes
+            cand.distancia_votos = cand_lim.qtd_votos - cand.qtd_votos
+            cand.viavel = cand.distancia_votos <= self.aprox_votos_restantes
+
+    def _infer_mat_def(self):
+        if not self.majoritario:
+            return
+        if self.mat_def in ("", "N", "n", None):
+            self.mat_def, _ = infer_mat_def_majoritario(
+                self.candidatos, self.aprox_votos_restantes
+            )
+        apply_mat_def_majoritario(self.candidatos, self.mat_def)
 
     def to_dict(self) -> dict:
         mat_labels = {"E": "Eleito", "S": "Segundo turno"}
@@ -169,6 +256,7 @@ class EleicaoStats:
             "apuracao_iniciada": self.perc_sec_totalizadas != 0,
             "mat_def": self.mat_def,
             "mat_def_label": mat_labels.get(self.mat_def),
+            "majoritario": self.majoritario,
             "qtd_vagas": self.qtd_vagas,
             "candidatos": [c.to_dict() for c in filtered],
             "updated_at": datetime.now().isoformat(),

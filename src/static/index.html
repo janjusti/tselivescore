@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=3" />
   </head>
   <body>
     <header class="toolbar">
@@ -18,8 +18,8 @@
           <dl>
             <dt>Δ%</dt>
             <dd>variação do percentual desde a última leitura</dd>
-            <dt>HP</dt>
-            <dd>estimativa de votos para alcançar a zona de classificação</dd>
+            <dt>Dist.</dt>
+            <dd>atraso em votos até o líder; se Dist. &gt; Restantes, eliminado matematicamente</dd>
           </dl>
         </details>
         <label>
@@ -79,13 +79,20 @@
         </div>
         <div class="panel-alert"></div>
         <table class="candidates">
+          <colgroup>
+            <col class="col-name" />
+            <col class="col-num" />
+            <col class="col-pct" />
+            <col class="col-delta" />
+            <col class="col-dist" />
+          </colgroup>
           <thead>
             <tr>
-              <th>Candidato</th>
-              <th>Votos</th>
-              <th>%</th>
-              <th>Δ%</th>
-              <th>HP</th>
+              <th class="col-name">Candidato</th>
+              <th class="col-num">Votos</th>
+              <th class="col-pct">%</th>
+              <th class="col-delta">Δ%</th>
+              <th class="col-dist dist-header">Dist.</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -93,6 +100,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=9"></script>
   </body>
 </html>

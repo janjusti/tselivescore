@@ -39,8 +39,10 @@ def format_cli(stats: EleicaoStats, qtd_printable: int) -> str:
         s += f"{cand.nome} -> {cand.qtd_votos:,} votos válidos ({cand.perc_votos}"
         delta_perc_votos = cand.perc_votos - cand.prev_perc_votos
         s += f"%{f' | {delta_perc_votos:+.2f}%' if delta_perc_votos != 0 else ''})"
-        if cand.hp is not None and cand.hp >= 0:
-            s += f" [HP: {f'{cand.hp:,}'}]"
+        if stats.majoritario and cand.distancia_votos is not None:
+            s += f" [Dist: {cand.distancia_votos:,}]"
+            if cand.viavel is False:
+                s += " (eliminado)"
         s += "\n"
     return s
 

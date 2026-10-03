@@ -186,6 +186,41 @@ function formatNumber(value) {
   return new Intl.NumberFormat("pt-BR").format(value ?? 0);
 }
 
+const compactFormatter = new Intl.NumberFormat("pt-BR", {
+  notation: "compact",
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+function formatCompact(value) {
+  if (value == null) return "";
+  return compactFormatter.format(value);
+}
+
+function formatPerc(value) {
+  return `${Number(value).toFixed(2)}%`;
+}
+
+function formatTseTimestamp(isoString) {
+  const date = new Date(isoString);
+  const ageMs = Date.now() - date.getTime();
+  if (ageMs >= 86400000) {
+    return date.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+  return date.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 function formatBadges(cand) {
   const badges = [];
   if (cand.sf_e === "s") {
@@ -247,6 +282,7 @@ function renderPanelData(panelEl, data) {
   errorEl.textContent = "";
   panelEl.querySelector(".panel-title").textContent = data.title || panelLabel(data.key);
 
+  const isMajoritario = Boolean(data.majoritario);
   const pct = Number(data.perc_sec_totalizadas) || 0;
   apuracaoLabel.textContent = `${pct}% apurado`;
   progressFill.style.width = `${pct}%`;
@@ -255,14 +291,19 @@ function renderPanelData(panelEl, data) {
   progressBar.setAttribute("aria-valuemax", "100");
 
   if (data.apuracao_iniciada) {
-    statsEl.textContent = `Comparecimento: ${data.perc_comparecimento}% · Votos restantes: ~${formatNumber(data.aprox_votos_restantes)}`;
+    let stats = `Comparecimento: ${data.perc_comparecimento}%`;
+    const restantes = Number(data.aprox_votos_restantes) || 0;
+    if (pct < 100 && restantes > 0) {
+      stats += ` · Restantes: ~${formatCompact(restantes)}`;
+    }
+    statsEl.textContent = stats;
   } else {
     statsEl.textContent = "Apuração ainda não iniciada.";
   }
 
   if (data.latest_update_tse) {
     const delay = data.tse_delay_human || `${data.tse_delay_seconds}s`;
-    updatedEl.textContent = `Atualizado: ${new Date(data.latest_update_tse).toLocaleString("pt-BR")} (há ${delay})`;
+    updatedEl.textContent = `Atualizado: ${formatTseTimestamp(data.latest_update_tse)} (há ${delay})`;
   } else {
     updatedEl.textContent = "";
   }
@@ -270,6 +311,9 @@ function renderPanelData(panelEl, data) {
   alertEl.textContent = data.mat_def_label
     ? `Matematicamente definido: ${data.mat_def_label}`
     : "";
+
+  panelEl.querySelector(".candidates")?.classList.toggle("no-dist", !isMajoritario);
+  const restantesFull = formatNumber(data.aprox_votos_restantes);
 
   tbody.innerHTML = "";
   const qtdVagas = Number(data.qtd_vagas) || 1;
@@ -279,8 +323,9 @@ function renderPanelData(panelEl, data) {
     if (cand.sf_e === "s") tr.classList.add("turno");
     if (cand.sf_e !== "n" && cand.sf_e !== "s") tr.classList.add("elected");
     if (idx === qtdVagas) tr.classList.add("cutoff");
-    const hasHp = cand.hp != null && cand.hp >= 0;
-    if (idx >= qtdVagas && !hasHp) tr.classList.add("eliminated");
+    const belowCutoff = idx >= qtdVagas;
+    const eliminado = isMajoritario && belowCutoff && cand.viavel === false;
+    if (eliminado) tr.classList.add("eliminated");
 
     const deltaKey = `${panelId}:${cand.nome}`;
     const prevDelta = prevDeltas.get(deltaKey);
@@ -296,17 +341,28 @@ function renderPanelData(panelEl, data) {
         ? ""
         : `<span class="${cand.delta_perc > 0 ? "delta-pos" : "delta-neg"}">${cand.delta_perc > 0 ? "+" : ""}${cand.delta_perc.toFixed(2)}%</span>`;
 
+    const distTitle =
+      isMajoritario && cand.distancia_votos != null
+        ? `Distância: ${formatNumber(cand.distancia_votos)} · Restantes: ~${restantesFull}${
+            eliminado ? " · eliminado" : " · ainda viável"
+          }`
+        : "";
+    const distCell =
+      isMajoritario && cand.distancia_votos != null
+        ? `<span class="dist-value">${formatCompact(cand.distancia_votos)}</span>`
+        : "";
+
     tr.innerHTML = `
-      <td>
+      <td class="col-name">
         <div class="cand-name">
           <span>${cand.nome}</span>
           ${formatBadges(cand)}
         </div>
       </td>
-      <td>${formatNumber(cand.qtd_votos)}</td>
-      <td>${cand.perc_votos}%</td>
-      <td>${deltaCell}</td>
-      <td>${hasHp ? formatNumber(cand.hp) : ""}</td>
+      <td class="col-num" title="${formatNumber(cand.qtd_votos)}">${formatCompact(cand.qtd_votos)}</td>
+      <td class="col-pct">${formatPerc(cand.perc_votos)}</td>
+      <td class="col-delta">${deltaCell}</td>
+      <td class="col-dist dist-cell" title="${distTitle}">${distCell}</td>
     `;
     tbody.appendChild(tr);
   });

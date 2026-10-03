@@ -2,8 +2,12 @@ import os
 import threading
 from datetime import datetime, timedelta
 
-from extras.eleicao import format_duration
-from extras.tse_client import panel_title, resolve_panel
+from extras.eleicao import (
+    apply_mat_def_majoritario,
+    format_duration,
+    infer_mat_def_majoritario,
+)
+from extras.tse_client import CARGOS_MAJORITARIOS, panel_title, resolve_panel
 
 MOCK_ENABLED = os.environ.get("TSELIVESCORE_MOCK", "").lower() in ("1", "true", "yes")
 
@@ -49,13 +53,19 @@ def _scenario(panel_key: str) -> dict:
     }
 
 
-def _calc_hp(candidatos: list[dict], qtd_vagas: int, aprox_votos_restantes: int):
-    if not candidatos or not qtd_vagas:
+def _calc_distancia(
+    candidatos: list[dict],
+    qtd_vagas: int,
+    aprox_votos_restantes: int,
+    majoritario: bool,
+):
+    if not majoritario or not candidatos or not qtd_vagas:
         return
     cand_lim = candidatos[qtd_vagas - 1]
     for cand in candidatos[qtd_vagas:]:
-        hp = (cand["qtd_votos"] - cand_lim["qtd_votos"]) + aprox_votos_restantes
-        cand["hp"] = hp if hp >= 0 else None
+        dist = cand_lim["qtd_votos"] - cand["qtd_votos"]
+        cand["distancia_votos"] = dist
+        cand["viavel"] = dist <= aprox_votos_restantes
 
 
 def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -> dict:
@@ -81,8 +91,12 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
         vv = int(_VV_BASE * perc_apurado / 100)
         comparecimento = 78.5
         pvv = 92.0
-        aprox_vv = int(_ELEITORADO * comparecimento / 100 * pvv / 100)
-        aprox_votos_restantes = int(aprox_vv * perc_pendente / 100)
+        if perc_apurado > 0:
+            aprox_votos_restantes = int(vv * perc_pendente / perc_apurado)
+        else:
+            aprox_vv = int(_ELEITORADO * comparecimento / 100 * pvv / 100)
+            aprox_votos_restantes = int(aprox_vv * perc_pendente / 100)
+        majoritario = cargo in CARGOS_MAJORITARIOS
 
         prev_perc_map = dict(state["prev_perc"])
         candidatos = []
@@ -94,34 +108,30 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
             delta = round(perc - prev_p, 2) if perc_apurado > 0 else None
             if delta == 0:
                 delta = None
-            sf_e = spec["sf_e"]
-            if perc_apurado >= 98 and spec["share"] >= 0.45:
-                sf_e = "e"
             candidatos.append(
                 {
                     "nome": spec["nome"],
                     "qtd_votos": qtd_votos,
                     "perc_votos": round(perc, 2),
                     "delta_perc": delta,
-                    "sf_e": sf_e,
+                    "sf_e": spec["sf_e"],
                     "sf_st": "",
-                    "hp": None,
+                    "distancia_votos": None,
+                    "viavel": None,
                 }
             )
             state["prev_perc"][spec["nome"]] = perc
 
         candidatos.sort(key=lambda c: c["perc_votos"], reverse=True)
         qtd_vagas = scenario["qtd_vagas"]
-        _calc_hp(candidatos, qtd_vagas, aprox_votos_restantes)
+        _calc_distancia(candidatos, qtd_vagas, aprox_votos_restantes, majoritario)
 
-        mat_def = ""
-        mat_def_label = None
-        if perc_apurado >= 98 and candidatos[0]["sf_e"] == "e":
-            mat_def = "E"
-            mat_def_label = "Eleito"
-        elif perc_apurado >= 90 and cargo == "1" and candidatos[0]["perc_votos"] < 50:
-            mat_def = "S"
-            mat_def_label = "Segundo turno"
+        mat_def, mat_def_label = "", None
+        if majoritario:
+            mat_def, mat_def_label = infer_mat_def_majoritario(
+                candidatos, aprox_votos_restantes
+            )
+            apply_mat_def_majoritario(candidatos, mat_def)
 
         now = datetime.now()
         tse_update = now - timedelta(seconds=45 + (tick % 20))
@@ -141,6 +151,7 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
             "apuracao_iniciada": perc_apurado > 0,
             "mat_def": mat_def,
             "mat_def_label": mat_def_label,
+            "majoritario": majoritario,
             "qtd_vagas": qtd_vagas,
             "candidatos": candidatos[:printables],
             "updated_at": now.isoformat(),

@@ -162,7 +162,7 @@ button:hover {
 
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
   gap: 1rem;
   padding: 1rem;
 }
@@ -173,6 +173,7 @@ button:hover {
   border-radius: 10px;
   padding: 0.75rem;
   min-width: 0;
+  overflow-x: auto;
 }
 
 .panel-header {
@@ -264,19 +265,86 @@ button:hover {
 
 .candidates {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
+}
+
+.candidates col.col-name {
+  width: 46%;
+}
+
+.candidates col.col-num {
+  width: 4.25rem;
+}
+
+.candidates col.col-pct {
+  width: 4rem;
+}
+
+.candidates col.col-delta {
+  width: 4.5rem;
+}
+
+.candidates col.col-dist {
+  width: 4.5rem;
+}
+
+.candidates.no-dist col.col-name {
+  width: 52%;
+}
+
+.candidates.no-dist col.col-num {
+  width: 4.75rem;
+}
+
+.candidates.no-dist col.col-pct {
+  width: 4.25rem;
+}
+
+.candidates.no-dist col.col-delta {
+  width: 4.75rem;
+}
+
+.candidates.no-dist col.col-dist {
+  width: 0;
 }
 
 .candidates th,
 .candidates td {
-  text-align: left;
   padding: 0.25rem 0.35rem;
   border-bottom: 1px solid var(--border);
+  vertical-align: top;
 }
 
 .candidates th {
   color: var(--muted);
   font-weight: 600;
+}
+
+.candidates .col-name {
+  text-align: left;
+}
+
+.candidates .col-name .cand-name > span:first-child {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidates .col-num,
+.candidates .col-pct,
+.candidates .col-delta,
+.candidates .col-dist {
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding-left: 0.5rem;
+}
+
+.candidates tr.eliminated .dist-value {
+  text-decoration: line-through;
+  opacity: 0.7;
 }
 
 .candidates tr.elected {
@@ -293,6 +361,11 @@ button:hover {
 
 .candidates tr.eliminated td {
   color: #9aa4ad;
+}
+
+.candidates.no-dist .dist-header,
+.candidates.no-dist .dist-cell {
+  display: none;
 }
 
 .candidates tr.flash-pos td {
