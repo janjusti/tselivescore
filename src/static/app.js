@@ -27,7 +27,7 @@ let freshnessTimer = null;
 let sessionId = null;
 const prevDeltas = new Map();
 
-const UPDATE_FRESHNESS_WINDOW_S = 60;
+const UPDATE_FRESHNESS_WINDOW_S = 30;
 const UPDATE_LIVE_THRESHOLD_S = 15;
 
 function apiUrl(path) {
@@ -340,12 +340,35 @@ function formatUpdateDelay(seconds) {
   return `${hours}h`;
 }
 
+function panelFromUpdatedEl(updatedEl) {
+  return updatedEl?.closest(".panel");
+}
+
+function clearUpdateFreshness(updatedEl) {
+  if (!updatedEl) return;
+  updatedEl.classList.remove("updated-live");
+  updatedEl.style.removeProperty("--freshness");
+  const panelEl = panelFromUpdatedEl(updatedEl);
+  if (!panelEl) return;
+  panelEl.classList.remove("panel-fresh", "panel-live");
+  panelEl.style.removeProperty("--freshness");
+}
+
 function applyUpdateFreshness(updatedEl, delaySeconds) {
   if (!updatedEl || delaySeconds == null) return;
 
   const freshness = Math.max(0, 1 - delaySeconds / UPDATE_FRESHNESS_WINDOW_S);
-  updatedEl.style.setProperty("--freshness", freshness.toFixed(3));
-  updatedEl.classList.toggle("updated-live", delaySeconds <= UPDATE_LIVE_THRESHOLD_S);
+  const isLive = delaySeconds <= UPDATE_LIVE_THRESHOLD_S;
+  const freshnessValue = freshness.toFixed(3);
+
+  updatedEl.style.setProperty("--freshness", freshnessValue);
+  updatedEl.classList.toggle("updated-live", isLive);
+
+  const panelEl = panelFromUpdatedEl(updatedEl);
+  if (!panelEl) return;
+  panelEl.style.setProperty("--freshness", freshnessValue);
+  panelEl.classList.toggle("panel-fresh", freshness > 0);
+  panelEl.classList.toggle("panel-live", isLive);
 }
 
 function renderPanelUpdated(updatedEl, data) {
@@ -354,8 +377,7 @@ function renderPanelUpdated(updatedEl, data) {
   if (!data.latest_update_tse) {
     updatedEl.textContent = "";
     updatedEl.removeAttribute("data-updated-at");
-    updatedEl.classList.remove("updated-live");
-    updatedEl.style.removeProperty("--freshness");
+    clearUpdateFreshness(updatedEl);
     return;
   }
 
@@ -364,7 +386,7 @@ function renderPanelUpdated(updatedEl, data) {
   updatedEl.dataset.updatedAt = data.latest_update_tse;
   updatedEl.innerHTML =
     `Atualizado: <span class="panel-updated-time">${formatTseTimestamp(data.latest_update_tse)}</span> ` +
-    `(<span class="panel-updated-delay">há ${delayLabel}</span>)`;
+    `<span class="panel-updated-pill"><span class="panel-updated-delay">há ${delayLabel}</span></span>`;
   applyUpdateFreshness(updatedEl, delaySeconds);
 }
 

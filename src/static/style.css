@@ -193,11 +193,42 @@ button:hover {
 }
 
 .panel {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.75rem;
   min-width: 0;
+  --freshness: 0;
+  transition: box-shadow 0.9s ease;
+}
+
+.panel.panel-fresh {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) calc(var(--freshness) * 50%), transparent),
+    0 0 14px color-mix(in srgb, var(--accent) calc(var(--freshness) * 10%), transparent);
+}
+
+.panel.panel-fresh::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 10px 10px 0 0;
+  background: color-mix(in srgb, var(--accent) calc(var(--freshness) * 75%), transparent);
+  pointer-events: none;
+}
+
+.panel.panel-live {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ok) calc(30% + var(--freshness) * 30%), transparent),
+    0 0 18px color-mix(in srgb, var(--ok) calc(var(--freshness) * 14%), transparent);
+}
+
+.panel.panel-live::before {
+  background: color-mix(in srgb, var(--ok) calc(55% + var(--freshness) * 35%), transparent);
 }
 
 .panel-header {
@@ -272,26 +303,46 @@ button:hover {
 }
 
 .panel-updated {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
   --freshness: 0;
 }
 
+.panel-updated-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) calc(14% + var(--freshness) * 20%), transparent);
+  transition: background 0.9s ease;
+}
+
+.panel-updated.updated-live .panel-updated-pill {
+  background: color-mix(in srgb, var(--ok) calc(22% + var(--freshness) * 28%), transparent);
+  animation: update-pill-pulse 2s ease-in-out infinite;
+}
+
 .panel-updated-delay {
-  color: color-mix(in srgb, var(--accent) calc(var(--freshness) * 100%), var(--muted));
-  font-weight: calc(400 + var(--freshness) * 350);
+  color: color-mix(in srgb, var(--accent) calc(45% + var(--freshness) * 55%), var(--muted));
+  font-weight: calc(500 + var(--freshness) * 400);
+  font-variant-numeric: tabular-nums;
   transition: color 0.9s ease, font-weight 0.9s ease;
 }
 
 .panel-updated.updated-live .panel-updated-delay {
-  animation: update-delay-pulse 2s ease-in-out infinite;
+  color: var(--ok);
+  font-weight: 700;
 }
 
-@keyframes update-delay-pulse {
+@keyframes update-pill-pulse {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.72;
   }
 }
 
