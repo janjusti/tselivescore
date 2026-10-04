@@ -333,11 +333,15 @@ function margemHeat(cand) {
 }
 
 function formatUpdateDelay(seconds) {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
   if (minutes < 60) return `${minutes}min`;
   const hours = Math.floor(minutes / 60);
-  return `${hours}h`;
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return `${days}d${remHours}h`;
 }
 
 function panelFromUpdatedEl(updatedEl) {
@@ -382,7 +386,7 @@ function renderPanelUpdated(updatedEl, data) {
   }
 
   const delaySeconds = Number(data.tse_delay_seconds) || 0;
-  const delayLabel = data.tse_delay_human || formatUpdateDelay(delaySeconds);
+  const delayLabel = formatUpdateDelay(delaySeconds);
   updatedEl.dataset.updatedAt = data.latest_update_tse;
   updatedEl.innerHTML =
     `Atualizado: <span class="panel-updated-time">${formatTseTimestamp(data.latest_update_tse)}</span> ` +

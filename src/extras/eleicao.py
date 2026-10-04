@@ -20,14 +20,14 @@ def format_duration(seconds: int | float | None) -> str | None:
         total = 0
     days, rem = divmod(total, 86400)
     hours, rem = divmod(rem, 3600)
-    minutes, secs = divmod(rem, 60)
+    minutes, _ = divmod(rem, 60)
     if days:
-        return f"{days}d{hours}h{minutes}m{secs}s"
+        return f"{days}d{hours}h"
     if hours:
-        return f"{hours}h{minutes}m{secs}s"
+        return f"{hours}h"
     if minutes:
-        return f"{minutes}m{secs}s"
-    return f"{secs}s"
+        return f"{minutes}min"
+    return f"{total}s"
 
 
 def _cand_votos(cand) -> int:
