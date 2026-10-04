@@ -113,6 +113,18 @@ class TestMatDefSenador(unittest.TestCase):
         mat_def, _ = infer_mat_def(cands, 0, CARGO_GOVERNADOR, 1)
         self.assertEqual(mat_def, "S")
 
+    def test_md_minusculo_do_tse_aplica_eleito_sem_garantido_turno(self):
+        cands = [
+            _cand("RIEDEL", 768_000, 67.32),
+            _cand("TRAD", 266_000, 23.12),
+            _cand("CATAN", 86_000, 7.48),
+        ]
+        mat_def = "e".upper()
+        apply_mat_def(cands, mat_def, CARGO_GOVERNADOR, 1)
+        apply_garantido_segundo_turno(cands, 210_000, mat_def)
+        self.assertEqual(cands[0]["sf_e"], "e")
+        self.assertFalse(cands[0].get("garantido_turno"))
+
 
 class TestDistanciaSegundoTurno(unittest.TestCase):
     def test_terceiro_mede_distancia_ao_segundo(self):

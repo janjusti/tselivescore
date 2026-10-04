@@ -408,7 +408,8 @@ class EleicaoStats:
         self.perc_sec_totalizadas = self.get_stat("pst")
         self.perc_sec_pendentes = self.get_stat("psnt")
         self.latest_update_tse = self._gen_update_dt()
-        self.mat_def = self.get_stat("md")
+        mat_def = self.get_stat("md")
+        self.mat_def = mat_def.upper() if isinstance(mat_def, str) and mat_def else mat_def
         self.qtd_votos_validos = self.get_stat("vv")
         self.majoritario = self.cargo_cd in CARGOS_MAJORITARIOS
         self.proporcional = self.cargo_cd in CARGOS_PROPORCIONAIS
