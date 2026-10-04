@@ -1378,16 +1378,6 @@ function applyUpdateFreshness(updatedEl, delaySeconds) {
   panelEl.classList.toggle("panel-live", isLive);
 }
 
-function vagasRestantes(data) {
-  const vagas = Number(data?.qtd_vagas);
-  if (!Number.isFinite(vagas) || vagas <= 0) return null;
-  const preenchidas = Math.min(
-    vagas,
-    Number(data?.vagas_preenchidas?.mat) || 0
-  );
-  return Math.max(0, vagas - preenchidas);
-}
-
 function formatPanelCounts(data) {
   if (!data?.proporcional) {
     return { text: null, title: "" };
@@ -1398,14 +1388,17 @@ function formatPanelCounts(data) {
   }
   const vagasLabel = vagas === 1 ? "vaga" : "vagas";
   let text = `${vagas} ${vagasLabel}`;
-  if (data.apuracao_iniciada) {
-    const restantes = vagasRestantes(data);
-    if (restantes != null) {
+  let title = "";
+  if (data.apuracao_iniciada && data.vagas_preenchidas) {
+    const oficial = Math.min(vagas, Number(data.vagas_preenchidas.oficial) || 0);
+    const restantes = Math.max(0, vagas - oficial);
+    if (oficial > 0 && restantes > 0) {
       const restLabel = restantes === 1 ? "restante" : "restantes";
       text += ` (${restantes} ${restLabel})`;
+      title = `${oficial} confirmada${oficial === 1 ? "" : "s"} pelo TSE`;
     }
   }
-  return { text, title: "" };
+  return { text, title };
 }
 
 function renderPanelCounts(panelEl, data) {
