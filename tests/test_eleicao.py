@@ -1,4 +1,6 @@
 import unittest
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from extras.eleicao import (
     apply_garantido_segundo_turno,
@@ -7,11 +9,30 @@ from extras.eleicao import (
     infer_mat_def_plurality,
     infer_mat_def_segundo_turno,
 )
-from extras.tse_client import CARGO_GOVERNADOR, CARGO_PRESIDENTE, CARGO_SENADOR
+from extras.tse_client import (
+    CARGO_GOVERNADOR,
+    CARGO_PRESIDENTE,
+    CARGO_SENADOR,
+    TZ_BRASILIA,
+    tse_timezone_for_panel,
+)
 
 
 def _cand(nome: str, votos: int, perc: float) -> dict:
     return {"nome": nome, "qtd_votos": votos, "perc_votos": perc, "sf_e": "n"}
+
+
+class TestTseTimezone(unittest.TestCase):
+    def test_ms_ht_do_tse_e_fuso_amazon_nao_brasilia(self):
+        tz = tse_timezone_for_panel("ms:3")
+        local = datetime(2026, 10, 4, 17, 38, 32, tzinfo=tz)
+        brasilia = local.astimezone(ZoneInfo(TZ_BRASILIA))
+        self.assertEqual(brasilia.hour, 18)
+        self.assertEqual(brasilia.minute, 38)
+
+    def test_sp_ht_do_tse_e_fuso_brasilia(self):
+        tz = tse_timezone_for_panel("sp:3")
+        self.assertEqual(str(tz), TZ_BRASILIA)
 
 
 class TestMatDefSenador(unittest.TestCase):

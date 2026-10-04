@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from extras import torequests
 from extras.proporcional import apply_proporcional, infer_mat_def_proporcional
@@ -10,6 +11,8 @@ from extras.tse_client import (
     normalize_payload,
     parse_response,
     resolve_panel,
+    tse_timezone_for_panel,
+    TZ_BRASILIA,
 )
 
 
@@ -372,7 +375,9 @@ class EleicaoStats:
     def _gen_update_dt(self) -> datetime | None:
         dt_str = f"{self.get_stat('dt')} {self.get_stat('ht')}"
         try:
-            return datetime.strptime(dt_str, "%d/%m/%Y %H:%M:%S")
+            naive = datetime.strptime(dt_str, "%d/%m/%Y %H:%M:%S")
+            tz = tse_timezone_for_panel(self._panel_key)
+            return naive.replace(tzinfo=tz)
         except Exception:
             return None
 
@@ -529,7 +534,11 @@ class EleicaoStats:
         tse_delay = None
         tse_delay_human = None
         if self.latest_update_tse is not None:
-            tse_delay = int((datetime.now() - self.latest_update_tse).total_seconds())
+            now = datetime.now(ZoneInfo(TZ_BRASILIA))
+            ts = self.latest_update_tse
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=ZoneInfo(TZ_BRASILIA))
+            tse_delay = int((now - ts).total_seconds())
             tse_delay_human = format_duration(tse_delay)
 
         filtered = (

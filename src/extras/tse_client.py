@@ -1,5 +1,6 @@
 import base64
 import json
+from zoneinfo import ZoneInfo
 
 TSE_BASE_URL = "https://resultados.tse.jus.br/oficial/ele2026"
 TSE_REFERER = "https://resultados.tse.jus.br/oficial/app/index.html"
@@ -34,6 +35,23 @@ UFS = [
     "pa", "pb", "pe", "pi", "pr", "rj", "rn", "ro", "rr", "rs", "sc", "se", "sp",
     "to",
 ]
+
+# Horário local em que o TSE grava dt/ht (não é sempre Brasília).
+# MS é UTC-3 oficialmente, mas o TSE publica ht no fuso Amazon/Cuiabá.
+UF_TSE_TIMEZONE = {
+    "ac": "America/Rio_Branco",
+    "am": "America/Manaus",
+    "mt": "America/Cuiaba",
+    "ms": "America/Cuiaba",
+    "ro": "America/Manaus",
+    "rr": "America/Manaus",
+}
+TZ_BRASILIA = "America/Sao_Paulo"
+
+
+def tse_timezone_for_panel(panel_key: str) -> ZoneInfo:
+    _, uf, _ = resolve_panel(panel_key)
+    return ZoneInfo(UF_TSE_TIMEZONE.get(uf, TZ_BRASILIA))
 
 
 def decode_jws(token: str) -> dict:
