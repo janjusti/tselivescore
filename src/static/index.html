@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=50" />
+    <link rel="stylesheet" href="/static/style.css?v=51" />
   </head>
   <body>
     <header class="toolbar">
@@ -36,6 +36,16 @@
           <span class="toggle-label">TV</span>
         </button>
         <button
+          id="events-btn"
+          type="button"
+          class="toolbar-toggle events-btn"
+          title="Histórico de eventos"
+          aria-haspopup="dialog"
+        >
+          <span class="toggle-label">Eventos</span>
+          <span id="events-badge" class="events-badge" hidden></span>
+        </button>
+        <button
           id="legend-btn"
           type="button"
           class="toolbar-toggle"
@@ -51,6 +61,16 @@
         <button id="add-panel-btn" type="button">+ Painel</button>
       </div>
     </header>
+
+    <dialog id="event-log-dialog" class="event-log-dialog" aria-labelledby="event-log-dialog-title">
+      <form method="dialog" class="event-log-dialog-form">
+        <header class="event-log-dialog-header">
+          <h2 id="event-log-dialog-title" class="event-log-dialog-title">Eventos</h2>
+          <button type="submit" class="event-log-dialog-close" aria-label="Fechar">×</button>
+        </header>
+        <div id="event-log-list-mobile" class="event-log-list" role="log" aria-live="polite"></div>
+      </form>
+    </dialog>
 
     <dialog id="legend-dialog">
       <form method="dialog" class="legend-form">
@@ -178,6 +198,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=98"></script>
+    <script src="/static/app.js?v=99"></script>
   </body>
 </html>

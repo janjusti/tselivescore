@@ -11,6 +11,10 @@ const audioToggle = document.getElementById("audio-toggle");
 const tvToggle = document.getElementById("tv-toggle");
 const notificationsEl = document.getElementById("notifications");
 const eventLogListEl = document.getElementById("event-log-list");
+const eventLogListMobileEl = document.getElementById("event-log-list-mobile");
+const eventsBtn = document.getElementById("events-btn");
+const eventsBadgeEl = document.getElementById("events-badge");
+const eventLogDialog = document.getElementById("event-log-dialog");
 const waitInput = document.getElementById("wait-input");
 const addDialog = document.getElementById("add-dialog");
 const addForm = document.getElementById("add-form");
@@ -523,13 +527,11 @@ function appendEventLog(event) {
   renderEventLog();
 }
 
-function renderEventLog() {
-  if (!eventLogListEl) return;
+function eventLogHtml() {
   if (!eventLog.length) {
-    eventLogListEl.innerHTML = '<p class="event-log-empty">Nenhum evento ainda.</p>';
-    return;
+    return '<p class="event-log-empty">Nenhum evento ainda.</p>';
   }
-  eventLogListEl.innerHTML = eventLog
+  return eventLog
     .map((entry) => {
       const detail = entry.detail
         ? `<div class="event-log-detail">${entry.detail}</div>`
@@ -547,6 +549,24 @@ function renderEventLog() {
       `;
     })
     .join("");
+}
+
+function updateEventsBadge() {
+  if (!eventsBadgeEl) return;
+  const count = eventLog.length;
+  if (count <= 0) {
+    eventsBadgeEl.hidden = true;
+    return;
+  }
+  eventsBadgeEl.textContent = count > 99 ? "99+" : String(count);
+  eventsBadgeEl.hidden = false;
+}
+
+function renderEventLog() {
+  const html = eventLogHtml();
+  if (eventLogListEl) eventLogListEl.innerHTML = html;
+  if (eventLogListMobileEl) eventLogListMobileEl.innerHTML = html;
+  updateEventsBadge();
 }
 
 function scheduleEventLogAgeRefresh() {
@@ -2108,6 +2128,10 @@ async function init() {
 }
 
 const legendDialog = document.getElementById("legend-dialog");
+
+eventsBtn?.addEventListener("click", () => {
+  eventLogDialog?.showModal();
+});
 
 document.getElementById("legend-btn")?.addEventListener("click", () => {
   legendDialog?.showModal();
