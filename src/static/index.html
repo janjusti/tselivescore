@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=30" />
+    <link rel="stylesheet" href="/static/style.css?v=33" />
   </head>
   <body>
     <header class="toolbar">
@@ -92,6 +92,24 @@
             <div class="panel-counts" hidden></div>
           </div>
           <div class="panel-controls">
+            <div class="panel-priority" aria-label="Prioridade">
+              <button
+                type="button"
+                class="panel-priority-up"
+                title="Mais prioridade"
+                aria-label="Mais prioridade"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                class="panel-priority-down"
+                title="Menos prioridade"
+                aria-label="Menos prioridade"
+              >
+                ▼
+              </button>
+            </div>
             <label class="panel-printables-label">
               <span>#</span>
               <input class="panel-printables" type="number" min="1" max="50" />
@@ -134,6 +152,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=53"></script>
+    <script src="/static/app.js?v=57"></script>
   </body>
 </html>

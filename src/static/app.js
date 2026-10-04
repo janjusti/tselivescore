@@ -48,6 +48,7 @@ const NOTIFICATION_TTL_MS = 12000;
 const NOTIFICATION_MAX = 8;
 const DELTA_ROLLING_MAX_TICKS = 12;
 const DELTA_ROLLING_MIN_TICKS = 2;
+const DEFAULT_PANEL_KEYS = ["br:1", "rn:3", "rn:5", "rn:6", "rn:7"];
 
 const EVENT_META = {
   eleito_mat: { label: "Eleito (mat.)", tone: "ok" },
@@ -545,6 +546,14 @@ function getSessionId() {
   return id;
 }
 
+function createDefaultPanels() {
+  return DEFAULT_PANEL_KEYS.map((key) => ({
+    id: uid(),
+    key,
+    printables: 5,
+  }));
+}
+
 function migratePanel(panel) {
   if (panel.key) return panel;
   if (panel.cod === "br") return { ...panel, key: "br:1" };
@@ -555,17 +564,15 @@ function migratePanel(panel) {
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    panels = [{ id: uid(), key: "br:1", printables: 5 }];
+    panels = createDefaultPanels();
     return;
   }
   try {
     const data = JSON.parse(raw);
-    panels = (data.panels?.length ? data.panels : [{ id: uid(), key: "br:1", printables: 5 }]).map(
-      migratePanel
-    );
+    panels = (data.panels?.length ? data.panels : createDefaultPanels()).map(migratePanel);
     waitInput.value = Math.max(data.wait ?? meta.default_wait, meta.min_wait);
   } catch {
-    panels = [{ id: uid(), key: "br:1", printables: 5 }];
+    panels = createDefaultPanels();
   }
 }
 
@@ -744,6 +751,36 @@ function observeColumnFitting() {
   columnFitObserver.observe(dashboardEl);
 }
 
+function updatePanelPriorityButtons() {
+  const nodes = [...dashboardEl.querySelectorAll(".panel")];
+  nodes.forEach((node, index) => {
+    const up = node.querySelector(".panel-priority-up");
+    const down = node.querySelector(".panel-priority-down");
+    if (up) up.disabled = index === 0;
+    if (down) down.disabled = index === nodes.length - 1;
+  });
+}
+
+function movePanel(panelId, direction) {
+  const idx = panels.findIndex((panel) => panel.id === panelId);
+  const targetIdx = idx + direction;
+  if (idx < 0 || targetIdx < 0 || targetIdx >= panels.length) return;
+
+  const el = dashboardEl.querySelector(`[data-id="${panelId}"]`);
+  const swapEl = dashboardEl.querySelector(`[data-id="${panels[targetIdx].id}"]`);
+  if (!el || !swapEl) return;
+
+  if (direction < 0) {
+    dashboardEl.insertBefore(el, swapEl);
+  } else {
+    dashboardEl.insertBefore(swapEl, el);
+  }
+
+  [panels[idx], panels[targetIdx]] = [panels[targetIdx], panels[idx]];
+  saveState();
+  updatePanelPriorityButtons();
+}
+
 function renderPanels() {
   dashboardEl.innerHTML = "";
   if (!panels.length) {
@@ -769,8 +806,15 @@ function renderPanels() {
       saveState();
       sendHeartbeat();
     });
+    node.querySelector(".panel-priority-up").addEventListener("click", () => {
+      movePanel(panel.id, -1);
+    });
+    node.querySelector(".panel-priority-down").addEventListener("click", () => {
+      movePanel(panel.id, 1);
+    });
     dashboardEl.appendChild(node);
   }
+  updatePanelPriorityButtons();
   observeColumnFitting();
 }
 
@@ -1482,8 +1526,7 @@ async function init() {
   renderPanels();
   if (meta.mock) {
     setStatus(
-      "Modo simulação — roteiro de notificações até 100% (~37 leituras a 5s). " +
-        "Sugestão: Presidente, Governador RN, Senador RN e Dep. Federal RN."
+      "Modo simulação — roteiro de notificações até 100% (~37 leituras a 5s)."
     );
     statusEl?.classList.add("mock");
   }
