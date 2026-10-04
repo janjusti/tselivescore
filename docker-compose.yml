@@ -20,4 +20,4 @@ services:
     environment:
       <<: *app-env
       TSELIVESCORE_DEBUG: 1
-      #TSELIVESCORE_MOCK: 1
+      TSELIVESCORE_MOCK: 1
