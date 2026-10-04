@@ -199,14 +199,40 @@ def _calc_distancia(
     qtd_vagas: int,
     aprox_votos_restantes: int,
     majoritario: bool,
+    segundo_turno: bool = False,
+    mat_def: str = "",
 ):
-    if not majoritario or not candidatos or not qtd_vagas:
+    if not majoritario or not candidatos:
+        return
+    restantes = max(0, int(aprox_votos_restantes or 0))
+    mat = (mat_def or "").upper()
+    if segundo_turno and len(candidatos) >= 2:
+        leader, second = candidatos[0], candidatos[1]
+        leader["distancia_votos"] = None
+        leader["viavel"] = None
+        if mat == "S" or second.get("garantido_turno"):
+            second["distancia_votos"] = None
+            second["viavel"] = None
+        else:
+            dist2 = leader["qtd_votos"] - second["qtd_votos"]
+            second["distancia_votos"] = dist2
+            second["viavel"] = dist2 <= restantes
+        for cand in candidatos[2:]:
+            dist = second["qtd_votos"] - cand["qtd_votos"]
+            cand["distancia_votos"] = dist
+            cand["viavel"] = dist <= restantes
+        if mat == "S":
+            for cand in candidatos[:2]:
+                cand["distancia_votos"] = None
+                cand["viavel"] = None
+        return
+    if not qtd_vagas:
         return
     cand_lim = candidatos[qtd_vagas - 1]
     for cand in candidatos[qtd_vagas:]:
         dist = cand_lim["qtd_votos"] - cand["qtd_votos"]
         cand["distancia_votos"] = dist
-        cand["viavel"] = dist <= aprox_votos_restantes
+        cand["viavel"] = dist <= restantes
 
 
 def fetch_mock_panel(
@@ -317,8 +343,6 @@ def fetch_mock_panel(
         if not proporcional:
             candidatos.sort(key=lambda c: c["perc_votos"], reverse=True)
         qtd_vagas = scenario["qtd_vagas"]
-        if perc_apurado > 0:
-            _calc_distancia(candidatos, qtd_vagas, aprox_votos_restantes, majoritario)
 
         legendas_resumo = []
         if proporcional and agr_list and perc_apurado > 0:
@@ -341,6 +365,14 @@ def fetch_mock_panel(
                 apply_garantido_segundo_turno(
                     candidatos, aprox_votos_restantes, mat_def or ""
                 )
+            _calc_distancia(
+                candidatos,
+                qtd_vagas,
+                aprox_votos_restantes,
+                majoritario,
+                cargo in CARGOS_SEGUNDO_TURNO,
+                mat_def or "",
+            )
 
         now = datetime.now()
         tse_update = now - timedelta(seconds=2 + (mock_tick % 6))
@@ -353,6 +385,7 @@ def fetch_mock_panel(
             "perc_sec_totalizadas": round(perc_apurado, 2),
             "perc_comparecimento": comparecimento,
             "aprox_votos_restantes": aprox_votos_restantes,
+            "qtd_votos_validos": vv,
             "latest_update_tse": tse_update.isoformat(),
             "tse_delay_seconds": tse_delay,
             "tse_delay_human": format_duration(tse_delay),

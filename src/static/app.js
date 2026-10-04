@@ -273,6 +273,12 @@ function formatDeltaCell(rollingDelta) {
   return `<span class="delta-value ${cls}" title="${title}">${sign}${delta.toFixed(2)}%</span>`;
 }
 
+function panelCutoffIndex(data) {
+  const qtdVagas = Number(data?.qtd_vagas) || 1;
+  if (data?.segundo_turno) return 2;
+  return qtdVagas;
+}
+
 function isSnapshotElected(snap, isProporcional, segundoTurno) {
   if (isProporcional) return snap.sf_e === "s";
   if (snap.sf_e === "e") return true;
@@ -421,7 +427,7 @@ function scheduleEventLogAgeRefresh() {
   }, EVENT_LOG_AGE_REFRESH_MS);
 }
 
-function isEventLogVisible() {
+function isSidebarVisible() {
   return window.matchMedia("(min-width: 901px)").matches;
 }
 
@@ -437,7 +443,7 @@ function dismissNotification(el) {
 
 function showNotification(event) {
   appendEventLog(event);
-  if (!notificationsEl || isEventLogVisible()) return;
+  if (!notificationsEl || isSidebarVisible()) return;
   const meta = EVENT_META[event.type] || { label: "Evento", tone: "" };
   const el = document.createElement("div");
   el.className = `notification notification-${meta.tone || "default"}`;
@@ -881,12 +887,14 @@ function syncCandidatesTableLayout(table, isMajoritario, isProporcional) {
       <col class="col-name" />
       <col class="col-num" />
       <col class="col-pct" />
+      <col class="col-delta" />
       <col class="col-margem" />
     `;
     theadRow.innerHTML = `
       <th class="col-name">Candidato</th>
       <th class="col-num">Votos</th>
       <th class="col-pct">%</th>
+      <th class="col-delta">Δ%</th>
       <th class="col-margem margem-header">Marg.</th>
     `;
   } else {
@@ -1253,23 +1261,44 @@ function scheduleFreshnessRefresh() {
   freshnessTimer = setInterval(refreshUpdateFreshness, 1000);
 }
 
-function formatLegendasResumo(legendas) {
-  if (!legendas?.length) return "";
-  return legendas.map((l) => `${l.sigla} ${l.cadeiras}`).join(" · ");
+function renderLegendasViz(container, legendas) {
+  if (!container) return;
+  container.replaceChildren();
+  if (!legendas?.length) {
+    container.hidden = true;
+    return;
+  }
+  container.hidden = false;
+  for (const leg of legendas) {
+    const cadeiras = Number(leg.cadeiras) || 0;
+    const chip = document.createElement("div");
+    chip.className = "legenda-chip";
+    chip.title = `${leg.sigla}: ${formatCompact(leg.votos)} votos · ${cadeiras} cadeira${cadeiras === 1 ? "" : "s"}`;
+
+    const sigla = document.createElement("span");
+    sigla.className = "legenda-sigla";
+    sigla.textContent = leg.sigla;
+
+    const seats = document.createElement("span");
+    seats.className = "legenda-seats";
+    for (let i = 0; i < cadeiras; i++) {
+      const block = document.createElement("span");
+      block.className = "leg-seat";
+      seats.appendChild(block);
+    }
+
+    const count = document.createElement("span");
+    count.className = "legenda-count";
+    count.textContent = String(cadeiras);
+
+    chip.append(sigla, seats, count);
+    container.appendChild(chip);
+  }
 }
 
 function panelMatAlert(data) {
   if (data.mat_def_label) {
     return `Matematicamente definido: ${data.mat_def_label}`;
-  }
-  if (
-    data.segundo_turno &&
-    data.candidatos?.length >= 2 &&
-    !data.mat_def &&
-    data.candidatos[0].garantido_turno &&
-    data.candidatos[1].garantido_turno
-  ) {
-    return "Vagas no 2º turno garantidas (mat.) para os dois primeiros colocados";
   }
   return "";
 }
@@ -1281,6 +1310,8 @@ function formatBadges(cand, isProporcional = false, segundoTurno = false, pct = 
     badges.push('<span class="badge badge-elected">Eleito</span>');
   } else if (cand.sf_e === "s" && segundoTurno) {
     badges.push('<span class="badge badge-turno">2º turno</span>');
+  } else if (cand.garantido_turno && segundoTurno) {
+    badges.push('<span class="badge badge-turno-mat">2ºT mat.</span>');
   } else if (cand.garantido) {
     badges.push('<span class="badge badge-elected-mat">Eleito (mat.)</span>');
   } else if (elim.foraMargem) {
@@ -1312,9 +1343,6 @@ function renderPanelStats(statsEl, data, pct, isProporcional) {
   const restantes = Number(data.aprox_votos_restantes) || 0;
   if (pct < 100 && restantes > 0) {
     lines.push(`Restantes: ~${formatCompact(restantes)}`);
-  }
-  if (isProporcional && data.legendas_resumo?.length) {
-    lines.push(formatLegendasResumo(data.legendas_resumo));
   }
   if (data.mock && data.mock_tick != null) {
     lines.push(`roteiro #${data.mock_tick}`);
@@ -1363,17 +1391,71 @@ function buildComparecimentoMetric(panelsData) {
   };
 }
 
-const toolbarMetricBuilders = [buildComparecimentoMetric];
-
-function renderToolbarMetric(row, metric) {
-  row.dataset.metric = metric.id;
-  row.replaceChildren();
-
-  const label = document.createElement("span");
-  label.className = "toolbar-metric-label";
-  label.textContent = `${metric.label}: `;
-  row.append(label, metric.value);
+function collectActivePanels(panelsData) {
+  const rows = [];
+  for (const panel of panels) {
+    const data = panelsData?.[panel.key];
+    if (!data || data.error || !data.apuracao_iniciada) continue;
+    rows.push({ key: panel.key, data });
+  }
+  return rows;
 }
+
+function buildApuracaoMetric(panelsData) {
+  const rows = collectActivePanels(panelsData);
+  if (!rows.length) return null;
+  const avg =
+    rows.reduce((sum, row) => sum + Number(row.data.perc_sec_totalizadas || 0), 0) /
+    rows.length;
+  return {
+    id: "apuracao",
+    label: "Apuração média",
+    value: `${avg.toFixed(1)}%`,
+  };
+}
+
+function buildVotosValidosMetric(panelsData) {
+  const scopes = new Map();
+  for (const panel of panels) {
+    const data = panelsData?.[panel.key];
+    if (!data || data.error || !data.qtd_votos_validos) continue;
+    const uf = scopeFromKey(panel.key);
+    scopes.set(uf, data.qtd_votos_validos);
+  }
+  if (!scopes.size) return null;
+  const value = [...scopes.entries()]
+    .sort(([a], [b]) => {
+      if (a === "br") return -1;
+      if (b === "br") return 1;
+      return a.localeCompare(b);
+    })
+    .map(([uf, vv]) => `${scopeLabel(uf)} ${formatCompact(vv)}`)
+    .join(" · ");
+  return { id: "votos-validos", label: "Votos válidos", value };
+}
+
+function buildTseDelayMetric(panelsData) {
+  const delays = [];
+  for (const panel of panels) {
+    const data = panelsData?.[panel.key];
+    if (!data || data.error || data.tse_delay_seconds == null) continue;
+    delays.push(Number(data.tse_delay_seconds));
+  }
+  if (!delays.length) return null;
+  const avg = Math.round(delays.reduce((sum, n) => sum + n, 0) / delays.length);
+  return {
+    id: "tse-delay",
+    label: "Atraso TSE",
+    value: `~${formatUpdateDelay(avg)}`,
+  };
+}
+
+const toolbarMetricBuilders = [
+  buildApuracaoMetric,
+  buildComparecimentoMetric,
+  buildVotosValidosMetric,
+  buildTseDelayMetric,
+];
 
 function renderToolbarMetrics(panelsData) {
   if (!toolbarMetrics) return;
@@ -1388,11 +1470,31 @@ function renderToolbarMetrics(panelsData) {
     return;
   }
 
-  for (const metric of metrics) {
-    const row = document.createElement("div");
-    row.className = "toolbar-metric";
-    renderToolbarMetric(row, metric);
-    toolbarMetrics.appendChild(row);
+  const compact = window.matchMedia("(min-width: 901px)").matches;
+  for (let i = 0; i < metrics.length; i++) {
+    const metric = metrics[i];
+    const chip = document.createElement("span");
+    chip.className = "toolbar-metric";
+    chip.dataset.metric = metric.id;
+
+    const label = document.createElement("span");
+    label.className = "toolbar-metric-label";
+    label.textContent = metric.label;
+
+    const value = document.createElement("span");
+    value.className = "toolbar-metric-value";
+    value.textContent = metric.value;
+
+    chip.append(label, value);
+    toolbarMetrics.appendChild(chip);
+
+    if (compact && i < metrics.length - 1) {
+      const sep = document.createElement("span");
+      sep.className = "toolbar-metric-sep";
+      sep.textContent = "·";
+      sep.setAttribute("aria-hidden", "true");
+      toolbarMetrics.appendChild(sep);
+    }
   }
   toolbarMetrics.hidden = false;
 }
@@ -1419,6 +1521,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
     progressBar.setAttribute("aria-valuenow", "0");
     statsEl.textContent = "";
     renderPanelCounts(panelEl, null);
+    renderLegendasViz(panelEl.querySelector(".panel-legendas-viz"), null);
     renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
     errorEl.textContent = "";
@@ -1431,6 +1534,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
     progressFill.style.width = "0%";
     statsEl.textContent = "";
     renderPanelCounts(panelEl, null);
+    renderLegendasViz(panelEl.querySelector(".panel-legendas-viz"), null);
     renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
     errorEl.textContent = data.error;
@@ -1454,6 +1558,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
   progressBar.setAttribute("aria-valuemax", "100");
 
   renderPanelStats(statsEl, data, pct, isProporcional);
+  renderLegendasViz(panelEl.querySelector(".panel-legendas-viz"), isProporcional ? data.legendas_resumo : null);
 
   renderPanelUpdated(updatedEl, data);
 
@@ -1462,9 +1567,9 @@ function renderPanelData(panelEl, data, panelKey = "") {
   const candidatesTable = panelEl.querySelector(".candidates");
   syncCandidatesTableLayout(candidatesTable, isMajoritario, isProporcional);
   const restantesFull = formatNumber(data.aprox_votos_restantes);
-
   tbody.innerHTML = "";
   const qtdVagas = Number(data.qtd_vagas) || 1;
+  const cutoffIdx = panelCutoffIndex(data);
   const panelId = panelEl.dataset.id;
   data.candidatos?.forEach((cand, idx) => {
     const tr = document.createElement("tr");
@@ -1472,14 +1577,15 @@ function renderPanelData(panelEl, data, panelKey = "") {
       if (cand.sf_e === "s" || cand.garantido) tr.classList.add("elected");
     } else {
       if (cand.sf_e === "s" && segundoTurno) tr.classList.add("turno");
+      else if (cand.garantido_turno && segundoTurno) tr.classList.add("turno-mat");
       if (cand.garantido || (cand.sf_e !== "n" && cand.sf_e !== "s")) {
         tr.classList.add("elected");
       } else if (cand.sf_e === "s" && !segundoTurno) {
         tr.classList.add("elected");
       }
     }
-    if (isMajoritario && idx === qtdVagas) tr.classList.add("cutoff");
-    const belowCutoff = idx >= qtdVagas;
+    if (idx === cutoffIdx) tr.classList.add("cutoff");
+    const belowCutoff = idx >= cutoffIdx;
     const noSegundoTurno = segundoTurno && cand.sf_e === "s";
     const eliminadoMajor =
       isMajoritario && belowCutoff && cand.viavel === false && !noSegundoTurno;
@@ -1492,7 +1598,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
     if (foraMargemProp) tr.classList.add("out-of-margin");
     if (isProporcional && cand.em_perigo) tr.classList.add("at-cutoff");
     let rollingDelta = null;
-    if (!isProporcional && apuracaoIniciada) {
+    if (apuracaoIniciada) {
       rollingDelta = computeRollingDeltaPerc(
         panelKey || data.key,
         cand.nome,
@@ -1515,9 +1621,11 @@ function renderPanelData(panelEl, data, panelKey = "") {
 
     const deltaCell = formatDeltaCell(rollingDelta);
 
+    const distRef =
+      segundoTurno && idx >= 2 ? "até o 2º colocado" : "até o líder";
     const distTitle =
       isMajoritario && cand.distancia_votos != null
-        ? `Distância: ${formatNumber(cand.distancia_votos)} · Restantes: ~${restantesFull}${
+        ? `Distância ${distRef}: ${formatNumber(cand.distancia_votos)} · Restantes: ~${restantesFull}${
             eliminadoMajor
               ? " · eliminado"
               : cand.garantido_turno && segundoTurno
@@ -1570,7 +1678,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
     const pctCell = `<td class="col-pct">${formatPerc(cand.perc_votos)}</td>`;
 
     if (isProporcional) {
-      tr.innerHTML = `${nameCell}${numCell}${pctCell}<td class="col-margem margem-cell"${margemStyle} title="${margemTitle}">${margemCell}</td>`;
+      tr.innerHTML = `${nameCell}${numCell}${pctCell}<td class="col-delta">${deltaCell}</td><td class="col-margem margem-cell"${margemStyle} title="${margemTitle}">${margemCell}</td>`;
     } else {
       tr.innerHTML = `${nameCell}${numCell}${pctCell}<td class="col-delta">${deltaCell}</td><td class="col-dist dist-cell" title="${distTitle}">${distCell}</td>`;
     }
@@ -1583,7 +1691,7 @@ function updateRollingPercHistory(panelsData) {
   if (!panelsData) return;
   for (const panel of panels) {
     const panelData = panelsData[panel.key];
-    if (!panelData || panelData.error || panelData.proporcional) continue;
+    if (!panelData || panelData.error) continue;
 
     if (shouldResetRollingPerc(panel.key, panelData)) {
       resetRollingPercHistory(panel.key);

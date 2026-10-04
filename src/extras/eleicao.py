@@ -280,13 +280,13 @@ class EleicaoStats:
         self._panel_key = panel_key
         self._filter_data()
         self._calc_aprox_votos_restantes()
-        self._calc_distancia()
         self._calc_proporcional()
         self._infer_mat_def()
         if self.segundo_turno:
             apply_garantido_segundo_turno(
                 self.candidatos, self.aprox_votos_restantes, self.mat_def or ""
             )
+        self._calc_distancia()
 
     def get_stat(self, key: str, custom_base: dict = None):
         base = self._raw_data if custom_base is None else custom_base
@@ -381,12 +381,44 @@ class EleicaoStats:
             )
 
     def _calc_distancia(self):
-        if not self.majoritario or not self.candidatos or not self.qtd_vagas:
+        if not self.majoritario or not self.candidatos:
+            return
+        if self.segundo_turno:
+            self._calc_distancia_segundo_turno()
+            return
+        if not self.qtd_vagas:
             return
         cand_lim = self.candidatos[self.qtd_vagas - 1]
         for cand in self.candidatos[self.qtd_vagas :]:
             cand.distancia_votos = cand_lim.qtd_votos - cand.qtd_votos
             cand.viavel = cand.distancia_votos <= self.aprox_votos_restantes
+
+    def _calc_distancia_segundo_turno(self):
+        if len(self.candidatos) < 2:
+            return
+        leader = self.candidatos[0]
+        second = self.candidatos[1]
+        restantes = max(0, int(self.aprox_votos_restantes or 0))
+        mat_def = (self.mat_def or "").upper()
+
+        leader.distancia_votos = None
+        leader.viavel = None
+
+        if mat_def == "S" or second.garantido_turno:
+            second.distancia_votos = None
+            second.viavel = None
+        else:
+            second.distancia_votos = leader.qtd_votos - second.qtd_votos
+            second.viavel = second.distancia_votos <= restantes
+
+        for cand in self.candidatos[2:]:
+            cand.distancia_votos = second.qtd_votos - cand.qtd_votos
+            cand.viavel = cand.distancia_votos <= restantes
+
+        if mat_def == "S":
+            for cand in self.candidatos[:2]:
+                cand.distancia_votos = None
+                cand.viavel = None
 
     def _infer_mat_def(self):
         if not self.majoritario:
@@ -437,6 +469,7 @@ class EleicaoStats:
             "perc_sec_totalizadas": self.perc_sec_totalizadas,
             "perc_comparecimento": self.perc_comparecimento,
             "aprox_votos_restantes": self.aprox_votos_restantes,
+            "qtd_votos_validos": self.qtd_votos_validos,
             "latest_update_tse": (
                 self.latest_update_tse.isoformat() if self.latest_update_tse else None
             ),

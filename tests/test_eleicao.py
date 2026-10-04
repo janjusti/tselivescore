@@ -114,5 +114,31 @@ class TestMatDefSenador(unittest.TestCase):
         self.assertEqual(mat_def, "S")
 
 
+class TestDistanciaSegundoTurno(unittest.TestCase):
+    def test_terceiro_mede_distancia_ao_segundo(self):
+        from extras.fixtures import _calc_distancia
+
+        cands = [
+            {
+                **_cand("Gov. RN A", 43_500_000, 51.84),
+                "garantido_turno": True,
+                "distancia_votos": None,
+                "viavel": None,
+            },
+            {
+                **_cand("Gov. RN B", 31_600_000, 37.63),
+                "garantido_turno": True,
+                "distancia_votos": None,
+                "viavel": None,
+            },
+            _cand("Gov. RN C", 8_850_000, 10.53),
+        ]
+        _calc_distancia(cands, 1, 16_000_000, True, segundo_turno=True, mat_def="")
+        self.assertIsNone(cands[0]["distancia_votos"])
+        self.assertIsNone(cands[1]["distancia_votos"])
+        self.assertEqual(cands[2]["distancia_votos"], 22_750_000)
+        self.assertFalse(cands[2]["viavel"])
+
+
 if __name__ == "__main__":
     unittest.main()

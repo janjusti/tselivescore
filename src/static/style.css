@@ -48,8 +48,9 @@ body {
 .toolbar-start {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.25rem;
   min-width: 0;
+  flex: 1;
 }
 
 .brand {
@@ -61,21 +62,45 @@ body {
 }
 
 .toolbar-metrics {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem 0.65rem;
   color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.3;
+  font-size: 0.74rem;
+  line-height: 1.25;
 }
 
 .toolbar-metrics:empty {
   display: none;
 }
 
+.toolbar-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
 .toolbar-metric-label {
-  color: var(--text);
+  color: var(--muted);
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.toolbar-metric-label::after {
+  content: ":";
+}
+
+.toolbar-metric-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-metric-sep {
+  display: none;
 }
 
 .live-indicator {
@@ -233,15 +258,15 @@ button:hover {
   display: none;
 }
 
-.event-log-header {
-  padding: 0.75rem 0.85rem;
+.sidebar-section-header {
+  padding: 0.6rem 0.85rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.event-log-title {
+.sidebar-section-title {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -455,7 +480,7 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.35rem;
 }
 
 .apuracao-label {
@@ -547,6 +572,50 @@ button:hover {
   display: none;
 }
 
+.panel-legendas-viz {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.55rem;
+  margin-bottom: 0.4rem;
+}
+
+.panel-legendas-viz[hidden] {
+  display: none;
+}
+
+.legenda-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.legenda-sigla {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.legenda-seats {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.leg-seat {
+  width: 0.42rem;
+  height: 0.62rem;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.legenda-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .panel-alert {
   margin-bottom: 0.5rem;
   color: var(--warn);
@@ -571,15 +640,19 @@ button:hover {
 }
 
 .candidates.layout-prop col.col-name {
-  width: 50%;
+  width: 42%;
 }
 
 .candidates.layout-prop col.col-num {
-  width: 20%;
+  width: 17%;
 }
 
 .candidates.layout-prop col.col-pct {
-  width: 14%;
+  width: 12%;
+}
+
+.candidates.layout-prop col.col-delta {
+  width: 13%;
 }
 
 .candidates.layout-prop col.col-margem {
@@ -708,6 +781,12 @@ button:hover {
   opacity: 0.7;
 }
 
+.candidates.layout-prop .col-delta {
+  min-width: 3.2rem;
+  padding-left: 0.1rem;
+  padding-right: 0.05rem;
+}
+
 .candidates tr.eliminated .dist-value,
 .candidates tr.eliminated .margem-value {
   text-decoration: line-through;
@@ -722,7 +801,7 @@ button:hover {
 }
 
 .candidates tr.cutoff td {
-  border-top: 2px solid var(--border);
+  border-top: 2px dashed color-mix(in srgb, var(--warn) 55%, var(--border));
 }
 
 .candidates tr.eliminated td {
@@ -875,6 +954,8 @@ button:hover {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 0.05rem 0.3rem;
+  white-space: nowrap;
+  flex-shrink: 0;
   border-radius: 4px;
   line-height: 1.3;
 }
@@ -1074,6 +1155,33 @@ dialog form {
 }
 
 @media (min-width: 901px) {
+  .toolbar {
+    align-items: center;
+  }
+
+  .toolbar-start {
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+  }
+
+  .toolbar-metrics {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0;
+    font-size: 0.78rem;
+  }
+
+  .toolbar-metric-sep {
+    display: inline;
+    margin: 0 0.4rem;
+    opacity: 0.45;
+    user-select: none;
+  }
+
   .event-log {
     display: flex;
     flex-direction: column;

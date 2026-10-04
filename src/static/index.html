@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=37" />
+    <link rel="stylesheet" href="/static/style.css?v=44" />
   </head>
   <body>
     <header class="toolbar">
@@ -100,8 +100,8 @@
     <div class="app-shell">
       <main id="dashboard" class="dashboard"></main>
       <aside id="event-log" class="event-log" aria-label="Histórico de eventos">
-        <div class="event-log-header">
-          <h2 class="event-log-title">Eventos</h2>
+        <div class="sidebar-section-header">
+          <h2 class="sidebar-section-title">Eventos</h2>
         </div>
         <div id="event-log-list" class="event-log-list"></div>
       </aside>
@@ -146,6 +146,7 @@
               <div class="progress-fill"></div>
             </div>
           </div>
+          <div class="panel-legendas-viz" hidden></div>
           <div class="panel-stats"></div>
           <div class="panel-updated"></div>
         </div>
@@ -174,6 +175,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=64"></script>
+    <script src="/static/app.js?v=78"></script>
   </body>
 </html>
