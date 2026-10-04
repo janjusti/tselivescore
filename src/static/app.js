@@ -287,11 +287,28 @@ function panelCutoffIndex(data) {
   return qtdVagas;
 }
 
+function isCandEleitoOficial(cand, isProporcional, segundoTurno) {
+  if (isProporcional) return cand.sf_e === "s";
+  if (cand.sf_e === "e") return true;
+  if (cand.sf_e === "s" && !segundoTurno) return true;
+  return false;
+}
+
+function isCandEleitoMat(cand, isProporcional) {
+  if (isProporcional) return Boolean(cand.garantido);
+  return Boolean(cand.eleito_mat);
+}
+
 function isSnapshotElected(snap, isProporcional, segundoTurno) {
   if (isProporcional) return snap.sf_e === "s";
   if (snap.sf_e === "e") return true;
   if (snap.sf_e === "s" && !segundoTurno) return true;
   return false;
+}
+
+function isSnapshotEleitoMat(snap, isProporcional) {
+  if (isProporcional) return Boolean(snap.garantido);
+  return Boolean(snap.eleito_mat);
 }
 
 function isSnapshotSegundoTurno(snap, segundoTurno) {
@@ -395,6 +412,7 @@ function candSnapshot(cand, idx, qtdVagas, isMajoritario, segundoTurno = false) 
   return {
     sf_e: cand.sf_e || "n",
     garantido: Boolean(cand.garantido),
+    eleito_mat: Boolean(cand.eleito_mat),
     garantido_turno: Boolean(cand.garantido_turno),
     eliminado_mat: Boolean(cand.eliminado_mat),
     eliminado_definitivo: Boolean(cand.eliminado_definitivo),
@@ -593,10 +611,10 @@ function detectElectionEvents(panelsData) {
 
       const wasEleito = isSnapshotElected(prev, isProporcional, segundoTurno);
       const nowEleito = isSnapshotElected(snap, isProporcional, segundoTurno);
-      const wasGarantido = prev.garantido;
-      const nowGarantido = snap.garantido;
+      const wasEleitoMat = isSnapshotEleitoMat(prev, isProporcional);
+      const nowEleitoMat = isSnapshotEleitoMat(snap, isProporcional);
 
-      if (!wasGarantido && nowGarantido && !nowEleito) {
+      if (!wasEleitoMat && nowEleitoMat && !nowEleito) {
         events.push({ type: "eleito_mat", panelTitle, subject: cand.nome });
       }
       if (!wasEleito && nowEleito) {
@@ -1160,6 +1178,13 @@ function isCandEleitoProporcional(cand) {
   return cand.sf_e === "s" || cand.garantido;
 }
 
+function isCandEleitoDestaque(cand, isProporcional, segundoTurno) {
+  return (
+    isCandEleitoOficial(cand, isProporcional, segundoTurno) ||
+    isCandEleitoMat(cand, isProporcional)
+  );
+}
+
 function candEliminacaoProp(cand, pct, isProporcional, usePctFallback = true) {
   if (!isProporcional || pct <= 0 || isCandEleitoProporcional(cand)) {
     return { definitivo: false, foraMargem: false };
@@ -1427,18 +1452,16 @@ function syncPanelSettledState(panelEl, data) {
 function formatBadges(cand, isProporcional = false, segundoTurno = false, pct = 0) {
   const badges = [];
   const elim = candEliminacaoProp(cand, pct, isProporcional);
-  if (isProporcional && cand.sf_e === "s") {
+  if (isCandEleitoOficial(cand, isProporcional, segundoTurno)) {
     badges.push('<span class="badge badge-elected">Eleito</span>');
   } else if (cand.sf_e === "s" && segundoTurno) {
     badges.push('<span class="badge badge-turno">2º turno</span>');
   } else if (cand.garantido_turno && segundoTurno) {
     badges.push('<span class="badge badge-turno-mat">2ºT mat.</span>');
-  } else if (cand.garantido) {
+  } else if (isCandEleitoMat(cand, isProporcional)) {
     badges.push('<span class="badge badge-elected-mat">Eleito (mat.)</span>');
   } else if (elim.foraMargem) {
     badges.push('<span class="badge badge-margin-mat">Fora da margem (mat.)</span>');
-  } else if (cand.sf_e !== "n" && cand.sf_e) {
-    badges.push('<span class="badge badge-elected">Eleito</span>');
   }
   if (cand.sf_st) {
     badges.push(`<span class="badge badge-st">${cand.sf_st}</span>`);
@@ -1698,13 +1721,11 @@ function renderPanelData(panelEl, data, panelKey = "") {
   data.candidatos?.forEach((cand, idx) => {
     const tr = document.createElement("tr");
     if (isProporcional) {
-      if (cand.sf_e === "s" || cand.garantido) tr.classList.add("elected");
+      if (isCandEleitoDestaque(cand, true, segundoTurno)) tr.classList.add("elected");
     } else {
       if (cand.sf_e === "s" && segundoTurno) tr.classList.add("turno");
       else if (cand.garantido_turno && segundoTurno) tr.classList.add("turno-mat");
-      if (cand.garantido || (cand.sf_e !== "n" && cand.sf_e !== "s")) {
-        tr.classList.add("elected");
-      } else if (cand.sf_e === "s" && !segundoTurno) {
+      if (isCandEleitoDestaque(cand, false, segundoTurno)) {
         tr.classList.add("elected");
       }
     }

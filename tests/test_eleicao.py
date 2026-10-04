@@ -49,16 +49,18 @@ class TestMatDefSenador(unittest.TestCase):
         self.assertEqual(label, "Eleitos")
         self.assertNotEqual(mat_def, "S")
 
-    def test_senador_aplica_eleitos_nos_dois_primeiros(self):
+    def test_senador_aplica_eleito_mat_sem_alterar_sf_e(self):
         cands = [
             _cand("A", 42_000_000, 42.04),
             _cand("B", 25_640_000, 25.64),
             _cand("C", 23_350_000, 23.35),
         ]
         apply_mat_def(cands, "E", CARGO_SENADOR, 2)
-        self.assertEqual(cands[0]["sf_e"], "e")
-        self.assertEqual(cands[1]["sf_e"], "e")
-        self.assertEqual(cands[2]["sf_e"], "n")
+        self.assertTrue(cands[0]["eleito_mat"])
+        self.assertTrue(cands[1]["eleito_mat"])
+        self.assertFalse(cands[2].get("eleito_mat"))
+        self.assertEqual(cands[0]["sf_e"], "n")
+        self.assertEqual(cands[1]["sf_e"], "n")
 
     def test_presidente_mesmos_votos_vai_segundo_turno(self):
         cands = [
@@ -76,7 +78,7 @@ class TestMatDefSenador(unittest.TestCase):
             _cand("B", 30_000_000, 30.0),
             _cand("C", 15_000_000, 15.0),
         ]
-        mat_def, _ = infer_mat_def(cands, 0, CARGO_PRESIDENTE, 1)
+        mat_def, _ = infer_mat_def(cands, 0, CARGO_PRESIDENTE, 1, 100_000_000)
         self.assertEqual(mat_def, "E")
 
     def test_senador_indefinido_com_votos_restantes(self):
@@ -109,7 +111,7 @@ class TestMatDefSenador(unittest.TestCase):
         apply_garantido_segundo_turno(cands, 0, "E")
         self.assertFalse(cands[0].get("garantido_turno"))
 
-    def test_segundo_turno_marca_os_dois_primeiros(self):
+    def test_segundo_turno_nao_altera_sf_e(self):
         cands = [
             _cand("A", 42_000_000, 42.04),
             _cand("B", 25_640_000, 25.64),
@@ -118,8 +120,8 @@ class TestMatDefSenador(unittest.TestCase):
         cands[1]["viavel"] = False
         cands[1]["distancia_votos"] = 5_000_000
         apply_mat_def(cands, "S", CARGO_PRESIDENTE, 1)
-        self.assertEqual(cands[0]["sf_e"], "s")
-        self.assertEqual(cands[1]["sf_e"], "s")
+        self.assertEqual(cands[0]["sf_e"], "n")
+        self.assertEqual(cands[1]["sf_e"], "n")
         self.assertEqual(cands[2]["sf_e"], "n")
         self.assertIsNone(cands[0]["viavel"])
         self.assertIsNone(cands[1]["viavel"])
@@ -134,7 +136,7 @@ class TestMatDefSenador(unittest.TestCase):
         mat_def, _ = infer_mat_def(cands, 0, CARGO_GOVERNADOR, 1)
         self.assertEqual(mat_def, "S")
 
-    def test_md_minusculo_do_tse_aplica_eleito_sem_garantido_turno(self):
+    def test_md_minusculo_do_tse_aplica_eleito_mat_sem_garantido_turno(self):
         cands = [
             _cand("RIEDEL", 768_000, 67.32),
             _cand("TRAD", 266_000, 23.12),
@@ -143,8 +145,18 @@ class TestMatDefSenador(unittest.TestCase):
         mat_def = "e".upper()
         apply_mat_def(cands, mat_def, CARGO_GOVERNADOR, 1)
         apply_garantido_segundo_turno(cands, 210_000, mat_def)
-        self.assertEqual(cands[0]["sf_e"], "e")
+        self.assertTrue(cands[0]["eleito_mat"])
+        self.assertEqual(cands[0]["sf_e"], "n")
         self.assertFalse(cands[0].get("garantido_turno"))
+
+    def test_governador_nao_eleito_mat_abaixo_de_50_no_final(self):
+        cands = [
+            _cand("MORO", 2_733_278, 50.34),
+            _cand("SANDRO", 1_363_032, 25.10),
+            _cand("REQUIAO", 1_274_873, 23.48),
+        ]
+        mat_def, _ = infer_mat_def_segundo_turno(cands, 854_711, 5_428_698)
+        self.assertEqual(mat_def, "")
 
 
 class TestDistanciaSegundoTurno(unittest.TestCase):

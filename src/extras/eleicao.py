@@ -138,18 +138,21 @@ def _cand_perc(cand) -> float:
     return cand.perc_votos if hasattr(cand, "perc_votos") else cand["perc_votos"]
 
 
-def infer_mat_def_segundo_turno(candidatos, aprox_votos_restantes) -> tuple[str, str | None]:
+def infer_mat_def_segundo_turno(
+    candidatos, aprox_votos_restantes, vv: int = 0
+) -> tuple[str, str | None]:
     """Presidente/governador: maioria absoluta ou 2º turno."""
     if not candidatos or len(candidatos) < 2:
         return "", None
 
     restantes = max(0, int(aprox_votos_restantes or 0))
     leader, second = candidatos[0], candidatos[1]
-    gap_lider_2o = _cand_votos(leader) - _cand_votos(second)
-    segundo_nao_alcanca = gap_lider_2o > restantes
+    vv = max(0, int(vv or 0))
 
-    if _cand_perc(leader) > 50 and segundo_nao_alcanca:
-        return "E", "Eleito"
+    if vv > 0:
+        min_perc_lider = _cand_votos(leader) * 100 / (vv + restantes)
+        if min_perc_lider > 50:
+            return "E", "Eleito"
 
     if len(candidatos) >= 3:
         third = candidatos[2]
@@ -187,10 +190,14 @@ def infer_mat_def_plurality(
 
 
 def infer_mat_def(
-    candidatos, aprox_votos_restantes, cargo_cd: str, qtd_vagas: int
+    candidatos,
+    aprox_votos_restantes,
+    cargo_cd: str,
+    qtd_vagas: int,
+    vv: int = 0,
 ) -> tuple[str, str | None]:
     if cargo_cd in CARGOS_SEGUNDO_TURNO:
-        return infer_mat_def_segundo_turno(candidatos, aprox_votos_restantes)
+        return infer_mat_def_segundo_turno(candidatos, aprox_votos_restantes, vv)
     if cargo_cd in CARGOS_MAJORITARIOS:
         return infer_mat_def_plurality(candidatos, aprox_votos_restantes, qtd_vagas)
     return "", None
@@ -200,13 +207,27 @@ def infer_mat_def(
 infer_mat_def_majoritario = infer_mat_def_segundo_turno
 
 
-def _set_sf_e(cand, value: str) -> None:
-    sf_e = cand.sf_e if hasattr(cand, "sf_e") else cand["sf_e"]
-    if sf_e in ("n", "", None):
-        if hasattr(cand, "sf_e"):
-            cand.sf_e = value
-        else:
-            cand["sf_e"] = value
+def _cand_sf_e(cand) -> str:
+    if hasattr(cand, "sf_e"):
+        return cand.sf_e or "n"
+    return cand.get("sf_e") or "n"
+
+
+def _clear_eleito_mat(candidatos) -> None:
+    for cand in candidatos:
+        if hasattr(cand, "eleito_mat"):
+            cand.eleito_mat = False
+        elif isinstance(cand, dict):
+            cand["eleito_mat"] = False
+
+
+def _set_eleito_mat(cand, value: bool = True) -> None:
+    if _cand_sf_e(cand) in ("e", "s"):
+        return
+    if hasattr(cand, "eleito_mat"):
+        cand.eleito_mat = value
+    elif isinstance(cand, dict):
+        cand["eleito_mat"] = value
 
 
 def apply_mat_def_segundo_turno(candidatos, mat_def: str) -> str:
@@ -214,10 +235,9 @@ def apply_mat_def_segundo_turno(candidatos, mat_def: str) -> str:
         return mat_def
     leader = candidatos[0]
     if mat_def == "E":
-        _set_sf_e(leader, "e")
+        _set_eleito_mat(leader, True)
     elif mat_def == "S":
         for cand in candidatos[:2]:
-            _set_sf_e(cand, "s")
             if hasattr(cand, "viavel"):
                 cand.viavel = None
                 cand.distancia_votos = None
@@ -231,11 +251,12 @@ def apply_mat_def_plurality(candidatos, mat_def: str, qtd_vagas: int) -> str:
     if not candidatos or not mat_def or mat_def != "E" or qtd_vagas <= 0:
         return mat_def
     for cand in candidatos[:qtd_vagas]:
-        _set_sf_e(cand, "e")
+        _set_eleito_mat(cand, True)
     return mat_def
 
 
 def apply_mat_def(candidatos, mat_def: str, cargo_cd: str, qtd_vagas: int) -> str:
+    _clear_eleito_mat(candidatos)
     if cargo_cd in CARGOS_SEGUNDO_TURNO:
         return apply_mat_def_segundo_turno(candidatos, mat_def)
     if cargo_cd in CARGOS_MAJORITARIOS:
@@ -295,6 +316,7 @@ class Candidato:
         self.dentro_proj = None
         self.legenda_sigla = None
         self.garantido = False
+        self.eleito_mat = False
         self.garantido_turno = False
         self.eliminado_mat = False
         self.eliminado_definitivo = False
@@ -325,6 +347,7 @@ class Candidato:
             "dentro_proj": self.dentro_proj,
             "legenda_sigla": self.legenda_sigla,
             "garantido": self.garantido,
+            "eleito_mat": self.eleito_mat,
             "garantido_turno": self.garantido_turno,
             "eliminado_mat": self.eliminado_mat,
             "eliminado_definitivo": self.eliminado_definitivo,
@@ -511,6 +534,7 @@ class EleicaoStats:
                 self.aprox_votos_restantes,
                 self.cargo_cd,
                 int(self.qtd_vagas or 0),
+                int(self.qtd_votos_validos or 0),
             )
         apply_mat_def(
             self.candidatos,
@@ -519,15 +543,25 @@ class EleicaoStats:
             int(self.qtd_vagas or 0),
         )
 
+    def _mat_def_eleito_oficial(self) -> bool:
+        if self.mat_def != "E" or not self.candidatos:
+            return False
+        if self.segundo_turno:
+            return self.candidatos[0].sf_e == "e"
+        qtd = int(self.qtd_vagas or 1)
+        return all(cand.sf_e == "e" for cand in self.candidatos[:qtd])
+
     def _mat_def_label(self) -> str | None:
         if not self.mat_def or self.mat_def in ("N", "n"):
             return None
         if self.mat_def == "S":
             return "Segundo turno"
         if self.mat_def == "E":
-            if not self.segundo_turno and (self.qtd_vagas or 0) > 1:
-                return "Eleitos"
-            return "Eleito"
+            plural = not self.segundo_turno and (self.qtd_vagas or 0) > 1
+            base = "Eleitos" if plural else "Eleito"
+            if self._mat_def_eleito_oficial():
+                return base
+            return f"{base} (mat.)"
         return None
 
     def to_dict(self) -> dict:

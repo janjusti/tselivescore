@@ -363,13 +363,20 @@ def fetch_mock_panel(
                 )
             elif majoritario:
                 mat_def, mat_def_label = infer_mat_def(
-                    candidatos, aprox_votos_restantes, cargo, qtd_vagas
+                    candidatos,
+                    aprox_votos_restantes,
+                    cargo,
+                    qtd_vagas,
+                    vv if perc_apurado > 0 else 0,
                 )
                 apply_mat_def(candidatos, mat_def, cargo, qtd_vagas)
                 if cargo in CARGOS_SEGUNDO_TURNO:
                     apply_garantido_segundo_turno(
                         candidatos, aprox_votos_restantes, mat_def or ""
                     )
+                    if mat_def == "S" and perc_apurado >= 100:
+                        for cand in candidatos[:2]:
+                            cand["sf_e"] = "s"
                 _calc_distancia(
                     candidatos,
                     qtd_vagas,
