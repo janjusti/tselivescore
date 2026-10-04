@@ -1715,6 +1715,12 @@ async function init() {
   observeColumnFitting();
 }
 
+const legendDialog = document.getElementById("legend-dialog");
+
+document.getElementById("legend-btn")?.addEventListener("click", () => {
+  legendDialog?.showModal();
+});
+
 document.getElementById("add-panel-btn").addEventListener("click", () => {
   updatePrintablesInputDefault();
   addDialog.showModal();

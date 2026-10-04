@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=36" />
+    <link rel="stylesheet" href="/static/style.css?v=37" />
   </head>
   <body>
     <header class="toolbar">
@@ -35,21 +35,14 @@
         >
           <span class="toggle-label">TV</span>
         </button>
-        <details class="legend">
-          <summary>Legenda</summary>
-          <dl>
-            <dt>Eleito / fora da margem / eliminado (mat.)</dt>
-            <dd>fora da margem: déficit &gt; votos novos estimados da legenda; eliminado (mat.): sem votos restantes na legenda</dd>
-            <dt>Δ%</dt>
-            <dd>variação acumulada do percentual nas últimas leituras com mudança (majoritário)</dd>
-            <dt>Dist.</dt>
-            <dd>atraso em votos até o líder; se Dist. &gt; Restantes, eliminado matematicamente</dd>
-            <dt>Legenda</dt>
-            <dd>verde = dentro, amarelo = na beira do corte, vermelho = fora (proporcional)</dd>
-            <dt>Marg.</dt>
-            <dd>+ folga / − déficit até o corte; cor indica proximidade (neutra se já eleito)</dd>
-          </dl>
-        </details>
+        <button
+          id="legend-btn"
+          type="button"
+          class="toolbar-toggle"
+          title="Legenda dos símbolos"
+        >
+          <span class="toggle-label">Legenda</span>
+        </button>
         <label>
           Atualizar a cada
           <input id="wait-input" type="number" min="5" max="60" value="5" />
@@ -58,6 +51,27 @@
         <button id="add-panel-btn" type="button">+ Painel</button>
       </div>
     </header>
+
+    <dialog id="legend-dialog">
+      <form method="dialog" class="legend-form">
+        <h2>Legenda</h2>
+        <dl class="legend-list">
+          <dt>Eleito / fora da margem / eliminado (mat.)</dt>
+          <dd>fora da margem: déficit &gt; votos novos estimados da legenda; eliminado (mat.): sem votos restantes na legenda</dd>
+          <dt>Δ%</dt>
+          <dd>variação acumulada do percentual nas últimas leituras com mudança (majoritário)</dd>
+          <dt>Dist.</dt>
+          <dd>atraso em votos até o líder; se Dist. &gt; Restantes, eliminado matematicamente</dd>
+          <dt>Legenda</dt>
+          <dd>verde = dentro, amarelo = na beira do corte, vermelho = fora (proporcional)</dd>
+          <dt>Marg.</dt>
+          <dd>+ folga / − déficit até o corte; cor indica proximidade (neutra se já eleito)</dd>
+        </dl>
+        <div class="dialog-actions">
+          <button type="submit">Fechar</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="add-dialog">
       <form method="dialog" id="add-form">
@@ -160,6 +174,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=63"></script>
+    <script src="/static/app.js?v=64"></script>
   </body>
 </html>
