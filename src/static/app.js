@@ -50,8 +50,8 @@ const prevPanelMatDef = new Map();
 let audioCtx = null;
 let audioUnlocked = false;
 
-const UPDATE_FRESHNESS_WINDOW_S = 30;
-const UPDATE_LIVE_THRESHOLD_S = 15;
+const UPDATE_FRESHNESS_WINDOW_S = 120;
+const UPDATE_LIVE_THRESHOLD_S = 60;
 const NOTIFICATION_TTL_MS = 12000;
 const NOTIFICATION_MAX = 8;
 const EVENT_LOG_MAX = 30;
@@ -302,7 +302,10 @@ function isSnapshotEliminated(snap, isProporcional, isMajoritario) {
   if (isProporcional) {
     return snap.sf_e === "n" && (snap.eliminado_mat || snap.eliminado_definitivo);
   }
-  if (isMajoritario) return snap.below_cutoff && snap.viavel === false;
+  if (isMajoritario) {
+    if (snap.garantido_turno || snap.sf_e === "s") return false;
+    return snap.below_cutoff && snap.viavel === false;
+  }
   return false;
 }
 
@@ -387,7 +390,8 @@ function savePanelCache() {
   } catch (_) {}
 }
 
-function candSnapshot(cand, idx, qtdVagas, isMajoritario) {
+function candSnapshot(cand, idx, qtdVagas, isMajoritario, segundoTurno = false) {
+  const cutoff = segundoTurno ? 2 : qtdVagas;
   return {
     sf_e: cand.sf_e || "n",
     garantido: Boolean(cand.garantido),
@@ -396,7 +400,7 @@ function candSnapshot(cand, idx, qtdVagas, isMajoritario) {
     eliminado_definitivo: Boolean(cand.eliminado_definitivo),
     viavel: cand.viavel,
     dentro_proj: cand.dentro_proj,
-    below_cutoff: isMajoritario && idx >= qtdVagas,
+    below_cutoff: isMajoritario && idx >= cutoff,
   };
 }
 
@@ -580,7 +584,7 @@ function detectElectionEvents(panelsData) {
     const saiuProj = [];
     const entrouProj = [];
     trackingCandidates(data).forEach((cand, idx) => {
-      const snap = candSnapshot(cand, idx, qtdVagas, isMajoritario);
+      const snap = candSnapshot(cand, idx, qtdVagas, isMajoritario, segundoTurno);
       nextMap.set(cand.nome, snap);
       if (!prevMap) return;
 
@@ -1254,6 +1258,24 @@ function formatUpdateDelay(seconds) {
   return `${days}d${remHours}h`;
 }
 
+function tseDelaySeconds(iso) {
+  if (!iso) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+}
+
+function updateFreshnessScore(delaySeconds) {
+  const delay = Math.max(0, Number(delaySeconds) || 0);
+  if (delay <= UPDATE_LIVE_THRESHOLD_S) {
+    return { freshness: 1, isLive: true };
+  }
+  if (delay >= UPDATE_FRESHNESS_WINDOW_S) {
+    return { freshness: 0, isLive: false };
+  }
+  const span = UPDATE_FRESHNESS_WINDOW_S - UPDATE_LIVE_THRESHOLD_S;
+  const t = (delay - UPDATE_LIVE_THRESHOLD_S) / span;
+  return { freshness: 1 - t, isLive: false };
+}
+
 function panelFromUpdatedEl(updatedEl) {
   return updatedEl?.closest(".panel");
 }
@@ -1271,8 +1293,7 @@ function clearUpdateFreshness(updatedEl) {
 function applyUpdateFreshness(updatedEl, delaySeconds) {
   if (!updatedEl || delaySeconds == null) return;
 
-  const freshness = Math.max(0, 1 - delaySeconds / UPDATE_FRESHNESS_WINDOW_S);
-  const isLive = delaySeconds <= UPDATE_LIVE_THRESHOLD_S;
+  const { freshness, isLive } = updateFreshnessScore(delaySeconds);
   const freshnessValue = freshness.toFixed(3);
 
   updatedEl.style.setProperty("--freshness", freshnessValue);
@@ -1325,9 +1346,9 @@ function renderPanelUpdated(updatedEl, data) {
     return;
   }
 
-  const delaySeconds = Number(data.tse_delay_seconds) || 0;
-  const delayLabel = formatUpdateDelay(delaySeconds);
   updatedEl.dataset.updatedAt = data.latest_update_tse;
+  const delaySeconds = tseDelaySeconds(data.latest_update_tse);
+  const delayLabel = formatUpdateDelay(delaySeconds);
   updatedEl.innerHTML =
     `Atualizado: <span class="panel-updated-time">${formatTseTimestamp(data.latest_update_tse)}</span> ` +
     `<span class="panel-updated-pill"><span class="panel-updated-delay">há ${delayLabel}</span></span>`;
@@ -1341,7 +1362,7 @@ function refreshUpdateFreshness() {
     const iso = updatedEl?.dataset.updatedAt;
     if (!updatedEl || !iso) continue;
 
-    const delaySeconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    const delaySeconds = tseDelaySeconds(iso);
     const delayEl = updatedEl.querySelector(".panel-updated-delay");
     if (delayEl) {
       delayEl.textContent = `há ${formatUpdateDelay(delaySeconds)}`;
@@ -1691,7 +1712,11 @@ function renderPanelData(panelEl, data, panelKey = "") {
     const belowCutoff = idx >= cutoffIdx;
     const noSegundoTurno = segundoTurno && cand.sf_e === "s";
     const eliminadoMajor =
-      isMajoritario && belowCutoff && cand.viavel === false && !noSegundoTurno;
+      isMajoritario &&
+      belowCutoff &&
+      cand.viavel === false &&
+      !noSegundoTurno &&
+      !cand.garantido_turno;
     const elimProp = apuracaoIniciada
       ? candEliminacaoProp(cand, pct, isProporcional)
       : { definitivo: false, foraMargem: false };

@@ -3,16 +3,24 @@ import unittest
 from extras.fixtures import fetch_mock_panel, reset_mock_state
 
 
-def _track(cand, idx, qtd_vagas, is_majoritario):
+def _track(cand, idx, qtd_vagas, is_majoritario, segundo_turno=False):
+    cutoff = 2 if segundo_turno else qtd_vagas
     return {
         "sf_e": cand.get("sf_e") or "n",
         "garantido": bool(cand.get("garantido")),
+        "garantido_turno": bool(cand.get("garantido_turno")),
         "eliminado_mat": bool(cand.get("eliminado_mat")),
         "eliminado_definitivo": bool(cand.get("eliminado_definitivo")),
         "viavel": cand.get("viavel"),
         "dentro_proj": cand.get("dentro_proj"),
-        "below_cutoff": is_majoritario and idx >= qtd_vagas,
+        "below_cutoff": is_majoritario and idx >= cutoff,
     }
+
+
+def _is_eliminated_maj(snap):
+    if snap.get("garantido_turno") or snap.get("sf_e") == "s":
+        return False
+    return snap["below_cutoff"] and snap["viavel"] is False
 
 
 def _detect_events(prev_entry, entry):
@@ -32,10 +40,13 @@ def _detect_events(prev_entry, entry):
     if md and md != prev_md and data.get("mat_def_label"):
         events.append(("mat_def", data.get("title"), data.get("mat_def_label")))
 
-    prev_map = {c["nome"]: _track(c, i, qtd_vagas, is_maj) for i, c in enumerate(prev["candidatos"])}
+    prev_map = {
+        c["nome"]: _track(c, i, qtd_vagas, is_maj, segundo_turno)
+        for i, c in enumerate(prev["candidatos"])
+    }
     saiu, entrou = [], []
     for idx, cand in enumerate(data["candidatos"]):
-        snap = _track(cand, idx, qtd_vagas, is_maj)
+        snap = _track(cand, idx, qtd_vagas, is_maj, segundo_turno)
         prev_snap = prev_map.get(cand["nome"])
         if not prev_snap:
             continue
@@ -55,7 +66,7 @@ def _detect_events(prev_entry, entry):
                 and prev_snap["sf_e"] == "n"
                 and (prev_snap["eliminado_mat"] or prev_snap["eliminado_definitivo"])
             )
-            or (is_maj and prev_snap["below_cutoff"] and prev_snap["viavel"] is False)
+            or (is_maj and _is_eliminated_maj(prev_snap))
         )
         now_elim = (
             (
@@ -63,7 +74,7 @@ def _detect_events(prev_entry, entry):
                 and snap["sf_e"] == "n"
                 and (snap["eliminado_mat"] or snap["eliminado_definitivo"])
             )
-            or (is_maj and snap["below_cutoff"] and snap["viavel"] is False)
+            or (is_maj and _is_eliminated_maj(snap))
         )
         was_elim_def = is_prop and prev_snap["eliminado_definitivo"]
         now_elim_def = is_prop and snap["eliminado_definitivo"]
@@ -141,6 +152,29 @@ class TestMockTimeline(unittest.TestCase):
         entry38 = fetch_mock_panel("rn:6", prev, 38)
         self.assertEqual(entry38["candidatos"][0]["qtd_votos"], frozen_vv)
         self.assertEqual(entry38["mock_tick"], 37)
+
+    def test_segundo_colocado_garantido_turno_nao_e_eliminado(self):
+        prev = {
+            "majoritario": True,
+            "segundo_turno": True,
+            "proporcional": False,
+            "qtd_vagas": 1,
+            "candidatos": [
+                {"nome": "Líder", "sf_e": "n", "viavel": True, "garantido_turno": False},
+                {"nome": "2º", "sf_e": "n", "viavel": True, "garantido_turno": False},
+                {"nome": "3º", "sf_e": "n", "viavel": True},
+            ],
+        }
+        entry = {
+            **prev,
+            "candidatos": [
+                {"nome": "Líder", "sf_e": "n", "viavel": None, "garantido_turno": True},
+                {"nome": "2º", "sf_e": "n", "viavel": False, "garantido_turno": True},
+                {"nome": "3º", "sf_e": "n", "viavel": False},
+            ],
+        }
+        events = _detect_events(prev, entry)
+        self.assertNotIn(("eliminado_mat_maj", "2º"), events)
 
     def test_roteiro_cobre_todos_os_eventos(self):
         expected = {
