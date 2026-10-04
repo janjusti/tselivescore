@@ -13,6 +13,8 @@ from extras.tse_client import (
 )
 
 
+FINGERPRINT_HEAD_CANDIDATOS = 50
+
 CANDIDATO_TRACK_FIELDS = (
     "nome",
     "perc_votos",
@@ -23,9 +25,43 @@ CANDIDATO_TRACK_FIELDS = (
     "eliminado_definitivo",
     "viavel",
     "dentro_proj",
+    "em_perigo",
     "legenda_sigla",
     "partido_sg",
 )
+
+
+def _cand_get(cand, field: str):
+    if isinstance(cand, dict):
+        return cand.get(field)
+    return getattr(cand, field, None)
+
+
+def cand_is_track_relevant(cand) -> bool:
+    if _cand_get(cand, "dentro_proj"):
+        return True
+    if _cand_get(cand, "em_perigo"):
+        return True
+    if _cand_get(cand, "garantido"):
+        return True
+    if _cand_get(cand, "garantido_turno"):
+        return True
+    if _cand_get(cand, "eliminado_mat"):
+        return True
+    if _cand_get(cand, "eliminado_definitivo"):
+        return True
+    sf_e = _cand_get(cand, "sf_e")
+    if sf_e not in (None, "", "n"):
+        return True
+    if _cand_get(cand, "distancia_votos") is not None:
+        return True
+    return False
+
+
+def candidatos_for_track(candidatos, printables: int) -> list:
+    start = max(0, int(printables or 0))
+    tail = list(candidatos or [])[start:]
+    return [cand for cand in tail if cand_is_track_relevant(cand)]
 
 
 def candidatos_track_payload(candidatos) -> list[dict]:
@@ -39,6 +75,38 @@ def candidatos_track_payload(candidatos) -> list[dict]:
         else:
             rows.append({field: getattr(cand, field, None) for field in CANDIDATO_TRACK_FIELDS})
     return rows
+
+
+def cand_fingerprint_part(cand) -> str:
+    return (
+        f"{_cand_get(cand, 'nome')}:{_cand_get(cand, 'qtd_votos')}:"
+        f"{_cand_get(cand, 'perc_votos')}:{_cand_get(cand, 'sf_e')}:"
+        f"{_cand_get(cand, 'garantido')}:{_cand_get(cand, 'garantido_turno')}:"
+        f"{_cand_get(cand, 'dentro_proj')}:{_cand_get(cand, 'em_perigo')}:"
+        f"{_cand_get(cand, 'eliminado_mat')}:{_cand_get(cand, 'eliminado_definitivo')}"
+    )
+
+
+def entry_fingerprint(entry: dict | None) -> int:
+    import zlib
+
+    if not entry:
+        return 0
+    parts = [
+        str(entry.get("perc_sec_totalizadas")),
+        str(entry.get("aprox_votos_restantes")),
+        str(entry.get("mat_def")),
+        str(entry.get("mock_tick")),
+        str(entry.get("latest_update_tse")),
+        str(entry.get("error")),
+        str(len(entry.get("candidatos") or [])),
+    ]
+    for leg in entry.get("legendas_resumo") or []:
+        parts.append(f"{leg.get('sigla')}:{leg.get('cadeiras')}:{leg.get('votos')}")
+    for idx, cand in enumerate(entry.get("candidatos") or []):
+        if idx < FINGERPRINT_HEAD_CANDIDATOS or cand_is_track_relevant(cand):
+            parts.append(cand_fingerprint_part(cand))
+    return zlib.crc32("|".join(parts).encode()) & 0xFFFFFFFF
 
 
 def format_duration(seconds: int | float | None) -> str | None:

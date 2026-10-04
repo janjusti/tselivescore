@@ -1,10 +1,15 @@
 import os
 import threading
 import time
-import zlib
 from dataclasses import dataclass, field
 
-from extras.eleicao import EleicaoStats, candidatos_track_payload, fetch_eleicao_stats
+from extras.eleicao import (
+    EleicaoStats,
+    candidatos_for_track,
+    candidatos_track_payload,
+    entry_fingerprint,
+    fetch_eleicao_stats,
+)
 from extras.fixtures import MOCK_ENABLED, fetch_mock_panel, reset_mock_state
 from extras.tse_client import resolve_panel
 
@@ -12,41 +17,19 @@ MIN_WAIT_SECONDS = 5
 SESSION_TTL_SECONDS = int(os.environ.get("TSELIVESCORE_SESSION_TTL", "30"))
 
 
-def _entry_fingerprint(entry: dict | None) -> int:
-    if not entry:
-        return 0
-    parts = [
-        str(entry.get("perc_sec_totalizadas")),
-        str(entry.get("aprox_votos_restantes")),
-        str(entry.get("mat_def")),
-        str(entry.get("mock_tick")),
-        str(entry.get("latest_update_tse")),
-        str(entry.get("error")),
-    ]
-    for cand in entry.get("candidatos") or []:
-        if isinstance(cand, dict):
-            parts.append(
-                f"{cand.get('nome')}:{cand.get('qtd_votos')}:{cand.get('perc_votos')}:"
-                f"{cand.get('sf_e')}:{cand.get('garantido')}:{cand.get('garantido_turno')}:"
-                f"{cand.get('dentro_proj')}:{cand.get('eliminado_mat')}:{cand.get('eliminado_definitivo')}"
-            )
-        else:
-            parts.append(str(cand))
-    for leg in entry.get("legendas_resumo") or []:
-        parts.append(f"{leg.get('sigla')}:{leg.get('cadeiras')}:{leg.get('votos')}")
-    return zlib.crc32("|".join(parts).encode()) & 0xFFFFFFFF
-
-
 def _slice_entry(entry: dict | None, printables: int) -> dict | None:
     if entry is None:
         return None
     sliced = dict(entry)
+    sliced.pop("_rev", None)
     sliced["printables"] = printables
     candidatos = entry.get("candidatos")
     if candidatos is not None:
         sliced["candidatos"] = candidatos[:printables]
-        tail = candidatos[printables:]
-        sliced["candidatos_track"] = candidatos_track_payload(tail) if tail else []
+        track_src = candidatos_for_track(candidatos, printables)
+        sliced["candidatos_track"] = (
+            candidatos_track_payload(track_src) if track_src else []
+        )
     return sliced
 
 
@@ -79,6 +62,7 @@ class PollerState:
 class ElectionPoller:
     def __init__(self):
         self._state = PollerState()
+        self._poll_lock = threading.Lock()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
@@ -101,8 +85,8 @@ class ElectionPoller:
             session_panels = list(panels)
             merged_after_sig = self._panel_signature(self._merged_panels_locked())
 
-        if merged_after_sig != merged_before:
-            self.poll_now()
+        if merged_after_sig != merged_before and self._needs_poll(session_panels):
+            self._schedule_poll()
 
         return self._snapshot_for(session_panels, client_revs)
 
@@ -180,21 +164,45 @@ class ElectionPoller:
         }
 
     def poll_now(self, panels: list[PanelConfig] | None = None):
-        if panels is None:
-            panels = self._merged_panels()
-        if not panels:
+        if not self._poll_lock.acquire(blocking=False):
             return
-        mock_tick = 0
-        if MOCK_ENABLED:
+        try:
+            if panels is None:
+                panels = self._merged_panels()
+            if not panels:
+                return
+            mock_tick = 0
+            if MOCK_ENABLED:
+                with self._state.lock:
+                    self._state.mock_tick += 1
+                    mock_tick = self._state.mock_tick
+            for panel in panels:
+                self._poll_panel(panel, mock_tick=mock_tick)
             with self._state.lock:
-                self._state.mock_tick += 1
-                mock_tick = self._state.mock_tick
-        for panel in panels:
-            self._poll_panel(panel, mock_tick=mock_tick)
+                self._state.last_tse_poll_at = time.time()
+                self._state.last_tse_poll_panels = [panel.key for panel in panels]
+                self._state.tse_poll_total += len(panels)
+        finally:
+            self._poll_lock.release()
+
+    def _needs_poll(self, panels: list[PanelConfig]) -> bool:
         with self._state.lock:
-            self._state.last_tse_poll_at = time.time()
-            self._state.last_tse_poll_panels = [panel.key for panel in panels]
-            self._state.tse_poll_total += len(panels)
+            cache = self._state.cache
+            last_poll_at = self._state.last_tse_poll_at
+        for panel in panels:
+            if panel.key not in cache:
+                return True
+        if last_poll_at is None:
+            return True
+        return time.time() - last_poll_at >= self._effective_wait()
+
+    def _schedule_poll(self):
+        def run():
+            panels = self._merged_panels()
+            if panels:
+                self.poll_now(panels)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _purge_stale_sessions(self):
         cutoff = time.time() - SESSION_TTL_SECONDS
@@ -262,7 +270,7 @@ class ElectionPoller:
             with self._state.lock:
                 prev_cache = self._state.cache.get(panel_key)
             entry = fetch_mock_panel(panel_key, prev_cache, mock_tick)
-            entry["_rev"] = _entry_fingerprint(entry)
+            entry["_rev"] = entry_fingerprint(entry)
             with self._state.lock:
                 self._state.cache[panel_key] = entry
             return
@@ -281,7 +289,7 @@ class ElectionPoller:
             with self._state.lock:
                 self._state.prev_stats[panel_key] = stats
 
-        entry["_rev"] = _entry_fingerprint(entry)
+        entry["_rev"] = entry_fingerprint(entry)
         with self._state.lock:
             self._state.cache[panel_key] = entry
 

@@ -29,6 +29,10 @@ let meta = {
 };
 let panels = [];
 let heartbeatTimer = null;
+let heartbeatInFlight = false;
+let heartbeatRetryCount = 0;
+const HEARTBEAT_RETRY_MAX = 6;
+const HEARTBEAT_RETRY_MS = 500;
 let freshnessTimer = null;
 let columnFitObserver = null;
 let sessionId = null;
@@ -53,6 +57,7 @@ const NOTIFICATION_MAX = 8;
 const EVENT_LOG_MAX = 30;
 const EVENT_LOG_AGE_REFRESH_MS = 15000;
 const PRINTABLES_HARD_MAX = 50;
+const PANEL_CACHE_KEY = "tselivescore-panel-cache";
 
 let eventLog = [];
 const panelMaxPrintables = new Map();
@@ -345,6 +350,7 @@ function mergeSessionPanels(data) {
     }
   }
   cachedPanelsData = merged;
+  savePanelCache();
   return { ...data, panels: merged };
 }
 
@@ -352,6 +358,33 @@ function resetSessionPanelCache() {
   cachedPanelsData = {};
   for (const key of Object.keys(panelRevs)) delete panelRevs[key];
   for (const key of Object.keys(panelRevsPrintables)) delete panelRevsPrintables[key];
+  try {
+    sessionStorage.removeItem(PANEL_CACHE_KEY);
+  } catch (_) {}
+}
+
+function loadPanelCache() {
+  try {
+    const raw = sessionStorage.getItem(PANEL_CACHE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    Object.assign(panelRevs, data.revs || {});
+    Object.assign(panelRevsPrintables, data.revsPrintables || {});
+    cachedPanelsData = data.panels || {};
+  } catch (_) {}
+}
+
+function savePanelCache() {
+  try {
+    sessionStorage.setItem(
+      PANEL_CACHE_KEY,
+      JSON.stringify({
+        revs: panelRevs,
+        revsPrintables: panelRevsPrintables,
+        panels: cachedPanelsData,
+      })
+    );
+  } catch (_) {}
 }
 
 function candSnapshot(cand, idx, qtdVagas, isMajoritario) {
@@ -1801,7 +1834,7 @@ function renderDashboardData(data) {
 }
 
 async function sendHeartbeat() {
-  if (!panels.length) return;
+  if (!panels.length || heartbeatInFlight) return;
 
   const body = {
     session_id: sessionId,
@@ -1810,6 +1843,7 @@ async function sendHeartbeat() {
     revs: sessionRevsPayload(),
   };
 
+  heartbeatInFlight = true;
   try {
     const res = await fetch(apiUrl("/api/session"), {
       method: "POST",
@@ -1821,10 +1855,22 @@ async function sendHeartbeat() {
       return;
     }
     setLiveIndicator(true);
-    renderDashboardData(await res.json());
+    const data = await res.json();
+    renderDashboardData(data);
+    const allMissing =
+      panels.length > 0 &&
+      panels.every((p) => cachedPanelsData[p.key] == null);
+    if (allMissing && heartbeatRetryCount < HEARTBEAT_RETRY_MAX) {
+      heartbeatRetryCount += 1;
+      setTimeout(sendHeartbeat, HEARTBEAT_RETRY_MS);
+    } else if (!allMissing) {
+      heartbeatRetryCount = 0;
+    }
   } catch (err) {
     console.error(err);
     setLiveIndicator(false);
+  } finally {
+    heartbeatInFlight = false;
   }
 }
 
@@ -1880,6 +1926,7 @@ async function init() {
   renderEventLog();
   scheduleEventLogAgeRefresh();
   await loadState();
+  loadPanelCache();
   updateAudioToggleUI();
   setTvMode(isTvMode());
   setupAudioUnlock();
