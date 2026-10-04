@@ -27,12 +27,89 @@ let freshnessTimer = null;
 let columnFitObserver = null;
 let sessionId = null;
 const prevDeltas = new Map();
+const prevPanelTseUpdate = new Map();
+let audioCtx = null;
+let audioUnlocked = false;
 
 const UPDATE_FRESHNESS_WINDOW_S = 30;
 const UPDATE_LIVE_THRESHOLD_S = 15;
 
 function apiUrl(path) {
   return new URL(path, window.location.href).href;
+}
+
+function unlockAudio() {
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    try {
+      audioCtx = new Ctx();
+    } catch (_) {
+      return;
+    }
+  }
+  audioUnlocked = true;
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume().catch(() => {});
+  }
+}
+
+function setupAudioUnlock() {
+  const unlock = () => unlockAudio();
+  document.addEventListener("click", unlock);
+  document.addEventListener("keydown", unlock);
+  document.addEventListener("touchstart", unlock, { passive: true });
+}
+
+function playBeep(freq, duration, type, repeat, interval) {
+  if (!audioUnlocked || !audioCtx) return;
+  type = type || "square";
+  repeat = repeat || 1;
+  interval = interval || 0.15;
+  for (let i = 0; i < repeat; i++) {
+    const delay = i * interval;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = 0;
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime + delay);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      audioCtx.currentTime + delay + duration,
+    );
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(audioCtx.currentTime + delay);
+    osc.stop(audioCtx.currentTime + delay + duration + 0.05);
+  }
+}
+
+function playUpdateBeep() {
+  playBeep(880, 0.08, "square", 1);
+}
+
+function syncPanelUpdateTracking() {
+  const active = new Set(panels.map((panel) => panel.key));
+  for (const key of prevPanelTseUpdate.keys()) {
+    if (!active.has(key)) prevPanelTseUpdate.delete(key);
+  }
+}
+
+function detectPanelUpdates(panelsData) {
+  if (!panelsData) return;
+  syncPanelUpdateTracking();
+  let anyUpdated = false;
+  for (const panel of panels) {
+    const data = panelsData[panel.key];
+    if (!data || data.error) continue;
+    const ts = data.latest_update_tse;
+    if (!ts) continue;
+    const prev = prevPanelTseUpdate.get(panel.key);
+    if (prev && prev !== ts) anyUpdated = true;
+    prevPanelTseUpdate.set(panel.key, ts);
+  }
+  if (anyUpdated) playUpdateBeep();
 }
 
 function uid() {
@@ -740,6 +817,7 @@ function renderPanelData(panelEl, data) {
 
 function renderDashboardData(data) {
   if (!data) return;
+  detectPanelUpdates(data.panels);
   for (const panel of panels) {
     const panelEl = dashboardEl.querySelector(`[data-id="${panel.id}"]`);
     if (!panelEl) continue;
@@ -823,6 +901,7 @@ async function init() {
   waitInput.value = Math.max(meta.default_wait, meta.min_wait);
   fillCategorySelect();
   loadState();
+  setupAudioUnlock();
   renderPanels();
   if (meta.mock) {
     setStatus("Modo simulação — dados fictícios com apuração progressiva");
