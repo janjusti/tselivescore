@@ -1475,6 +1475,27 @@ function setLiveIndicator(ok) {
   liveIndicator.classList.toggle("stale", !ok);
 }
 
+function formatMaioria1tTitle(maioria1t, restantesFull, distSegundo) {
+  if (!maioria1t) return "";
+  const votos = formatNumber(maioria1t.votos_necessarios);
+  const pctMin = Number(maioria1t.percentual_minimo_final);
+  const pctHint = Number.isFinite(pctMin) ? ` · % mín. final (pior caso): ${pctMin.toFixed(2)}%` : "";
+  const distHint =
+    distSegundo != null
+      ? ` Distância do 2º ao líder: ${formatNumber(distSegundo)}.`
+      : "";
+  if (maioria1t.garantida) {
+    return `Maioria absoluta no 1º turno já garantida (pior caso).${distHint}`;
+  }
+  if (maioria1t.impossivel) {
+    return `Não alcança 50% mesmo com todos os votos restantes — 2º turno.${distHint}`;
+  }
+  return (
+    `Precisa de ~${votos} dos ~${restantesFull} votos válidos restantes para garantir maioria absoluta no 1º turno ` +
+    `(pior caso: sem ganhar votos além desse mínimo).${pctHint}${distHint}`
+  );
+}
+
 function renderPanelStats(statsEl, data, pct, isProporcional) {
   if (!statsEl) return;
 
@@ -1773,7 +1794,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
 
     const distRef =
       segundoTurno && idx >= 2 ? "até o 2º colocado" : "até o líder";
-    const distTitle =
+    let distTitle =
       isMajoritario && cand.distancia_votos != null
         ? `Distância ${distRef}: ${formatNumber(cand.distancia_votos)} · Restantes: ~${restantesFull}${
             eliminadoMajor
@@ -1783,10 +1804,24 @@ function renderPanelData(panelEl, data, panelKey = "") {
                 : " · ainda viável"
           }`
         : "";
-    const distCell =
+    let distCell =
       isMajoritario && cand.distancia_votos != null
         ? `<span class="dist-value">${formatCompact(cand.distancia_votos)}</span>`
         : "";
+
+    if (segundoTurno && idx === 0 && data.maioria_1t && data.mat_def !== "E") {
+      const m = data.maioria_1t;
+      const segundo = data.candidatos?.[1];
+      const distSegundo =
+        segundo && segundo.qtd_votos != null
+          ? Number(cand.qtd_votos) - Number(segundo.qtd_votos)
+          : null;
+      const maioriaTitle = formatMaioria1tTitle(m, restantesFull, distSegundo);
+      if (!m.garantida && !m.impossivel) {
+        distCell = `<span class="dist-value" title="${maioriaTitle}">(${formatCompact(m.votos_necessarios)})</span>`;
+      }
+      if (maioriaTitle) distTitle = maioriaTitle;
+    }
 
     let margemTitle = "";
     let margemCell = "";

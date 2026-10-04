@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from extras.eleicao import (
     apply_garantido_segundo_turno,
     apply_mat_def,
+    calc_maioria_1t,
     infer_mat_def,
     infer_mat_def_plurality,
     infer_mat_def_segundo_turno,
@@ -198,6 +199,75 @@ class TestDistanciaSegundoTurno(unittest.TestCase):
 
         _calc_distancia(cands, 1, 21_600_000, True, segundo_turno=True, mat_def="S")
         self.assertIsNone(cands[1]["distancia_votos"])
+
+
+class TestMaioria1t(unittest.TestCase):
+    def test_caso_celina_df(self):
+        cands = [_cand("CELINA", 794_000, 49.86), _cand("LEANDRO", 550_000, 34.5)]
+        m = calc_maioria_1t(
+            cands,
+            55_000,
+            1_592_000,
+            segundo_turno=True,
+            mat_def="",
+            apuracao_iniciada=True,
+        )
+        self.assertIsNotNone(m)
+        self.assertEqual(m["votos_necessarios"], 29_501)
+        self.assertEqual(m["votos_restantes"], 55_000)
+        self.assertFalse(m["garantida"])
+        self.assertFalse(m["impossivel"])
+        self.assertAlmostEqual(m["percentual_minimo_final"], 48.21, places=1)
+
+    def test_garantida_quando_lider_ja_passa_de_50_no_pior_caso(self):
+        cands = [_cand("A", 55_000_000, 55.0), _cand("B", 30_000_000, 30.0)]
+        m = calc_maioria_1t(
+            cands,
+            1_000_000,
+            100_000_000,
+            segundo_turno=True,
+            mat_def="",
+            apuracao_iniciada=True,
+        )
+        self.assertTrue(m["garantida"])
+        self.assertEqual(m["votos_necessarios"], 0)
+
+    def test_impossivel_quando_precisa_mais_que_restantes(self):
+        cands = [_cand("A", 42_000_000, 42.04), _cand("B", 25_640_000, 25.64)]
+        m = calc_maioria_1t(
+            cands,
+            5_000_000,
+            100_000_000,
+            segundo_turno=True,
+            mat_def="",
+            apuracao_iniciada=True,
+        )
+        self.assertTrue(m["impossivel"])
+        self.assertGreater(m["votos_necessarios"], m["votos_restantes"])
+
+    def test_nao_aplica_senador(self):
+        cands = [_cand("A", 42_000_000, 42.04), _cand("B", 25_640_000, 25.64)]
+        m = calc_maioria_1t(
+            cands,
+            0,
+            100_000_000,
+            segundo_turno=False,
+            mat_def="E",
+            apuracao_iniciada=True,
+        )
+        self.assertIsNone(m)
+
+    def test_nao_aplica_quando_ja_eleito(self):
+        cands = [_cand("A", 55_000_000, 55.0), _cand("B", 30_000_000, 30.0)]
+        m = calc_maioria_1t(
+            cands,
+            0,
+            100_000_000,
+            segundo_turno=True,
+            mat_def="E",
+            apuracao_iniciada=True,
+        )
+        self.assertIsNone(m)
 
 
 if __name__ == "__main__":

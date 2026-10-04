@@ -267,6 +267,46 @@ def apply_mat_def(candidatos, mat_def: str, cargo_cd: str, qtd_vagas: int) -> st
 apply_mat_def_majoritario = apply_mat_def_segundo_turno
 
 
+def calc_maioria_1t(
+    candidatos,
+    aprox_votos_restantes,
+    vv: int,
+    *,
+    segundo_turno: bool,
+    mat_def: str,
+    apuracao_iniciada: bool,
+) -> dict | None:
+    """Votos mínimos do líder nos pendentes para garantir >50% no total (pior caso)."""
+    if not segundo_turno or not apuracao_iniciada or not candidatos:
+        return None
+    mat = (mat_def or "").upper()
+    if mat == "E":
+        return None
+    leader = candidatos[0]
+    if _cand_sf_e(leader) == "e":
+        return None
+
+    vv = max(0, int(vv or 0))
+    restantes = max(0, int(aprox_votos_restantes or 0))
+    if vv <= 0:
+        return None
+
+    vv_final = vv + restantes
+    minimo = vv_final // 2 + 1
+    votos_necessarios = max(0, minimo - _cand_votos(leader))
+    percentual_minimo_final = _cand_votos(leader) * 100 / vv_final
+    garantida = votos_necessarios == 0
+    impossivel = votos_necessarios > restantes
+
+    return {
+        "votos_necessarios": votos_necessarios,
+        "votos_restantes": restantes,
+        "percentual_minimo_final": round(percentual_minimo_final, 2),
+        "garantida": garantida,
+        "impossivel": impossivel,
+    }
+
+
 def apply_garantido_segundo_turno(
     candidatos, aprox_votos_restantes, mat_def: str
 ) -> None:
@@ -325,6 +365,7 @@ class Candidato:
         self.restantes_legenda = None
         self.em_perigo = False
         self.nascimento = ""
+        self.votos_para_maioria_1t = None
 
     def __gt__(self, other):
         return self.perc_votos < other.perc_votos
@@ -355,6 +396,7 @@ class Candidato:
             "margem_folga": self.margem_folga,
             "restantes_legenda": self.restantes_legenda,
             "em_perigo": self.em_perigo,
+            "votos_para_maioria_1t": self.votos_para_maioria_1t,
         }
 
 
@@ -381,6 +423,7 @@ class EleicaoStats:
                 self.candidatos, self.aprox_votos_restantes, self.mat_def or ""
             )
         self._calc_distancia()
+        self._calc_maioria_1t()
 
     def get_stat(self, key: str, custom_base: dict = None):
         base = self._raw_data if custom_base is None else custom_base
@@ -517,6 +560,20 @@ class EleicaoStats:
                 cand.distancia_votos = None
                 cand.viavel = None
 
+    def _calc_maioria_1t(self):
+        self.maioria_1t = calc_maioria_1t(
+            self.candidatos,
+            self.aprox_votos_restantes,
+            int(self.qtd_votos_validos or 0),
+            segundo_turno=self.segundo_turno,
+            mat_def=self.mat_def or "",
+            apuracao_iniciada=self.perc_sec_totalizadas != 0,
+        )
+        if self.candidatos:
+            self.candidatos[0].votos_para_maioria_1t = (
+                self.maioria_1t["votos_necessarios"] if self.maioria_1t else None
+            )
+
     def _infer_mat_def(self):
         if self.proporcional:
             if self.mat_def in ("", "N", "n", None):
@@ -599,6 +656,7 @@ class EleicaoStats:
             "majoritario": self.majoritario,
             "proporcional": self.proporcional,
             "segundo_turno": self.segundo_turno,
+            "maioria_1t": self.maioria_1t,
             "legendas_resumo": self.legendas_resumo,
             "qtd_vagas": self.qtd_vagas,
             "qtd_candidatos": len(self.candidatos),

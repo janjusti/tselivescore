@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from extras.eleicao import (
     apply_garantido_segundo_turno,
     apply_mat_def,
+    calc_maioria_1t,
     format_duration,
     infer_mat_def,
 )
@@ -386,6 +387,20 @@ def fetch_mock_panel(
                     mat_def or "",
                 )
 
+        segundo_turno = cargo in CARGOS_SEGUNDO_TURNO
+        maioria_1t = None
+        if majoritario and segundo_turno and perc_apurado > 0:
+            maioria_1t = calc_maioria_1t(
+                candidatos,
+                aprox_votos_restantes,
+                vv if perc_apurado > 0 else 0,
+                segundo_turno=True,
+                mat_def=mat_def or "",
+                apuracao_iniciada=perc_apurado > 0,
+            )
+            if maioria_1t and candidatos:
+                candidatos[0]["votos_para_maioria_1t"] = maioria_1t["votos_necessarios"]
+
         now = datetime.now()
         tse_update = now - timedelta(seconds=2 + (mock_tick % 6))
         tse_delay = int((now - tse_update).total_seconds())
@@ -406,7 +421,8 @@ def fetch_mock_panel(
             "mat_def_label": mat_def_label,
             "majoritario": majoritario,
             "proporcional": proporcional,
-            "segundo_turno": cargo in CARGOS_SEGUNDO_TURNO,
+            "segundo_turno": segundo_turno,
+            "maioria_1t": maioria_1t,
             "legendas_resumo": legendas_resumo,
             "qtd_vagas": qtd_vagas,
             "qtd_candidatos": len(candidatos),
