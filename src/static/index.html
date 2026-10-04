@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=19" />
+    <link rel="stylesheet" href="/static/style.css?v=23" />
   </head>
   <body>
     <header class="toolbar">
@@ -16,11 +16,30 @@
         <div id="toolbar-metrics" class="toolbar-metrics" hidden></div>
       </div>
       <div class="toolbar-actions">
+        <button
+          id="audio-toggle"
+          type="button"
+          class="toolbar-toggle"
+          aria-pressed="true"
+          title="Desativar sons"
+        >
+          <span class="toggle-icon" aria-hidden="true">🔊</span>
+          <span class="toggle-label">Som</span>
+        </button>
+        <button
+          id="tv-toggle"
+          type="button"
+          class="toolbar-toggle"
+          aria-pressed="false"
+          title="Ativar modo TV"
+        >
+          <span class="toggle-label">TV</span>
+        </button>
         <details class="legend">
           <summary>Legenda</summary>
           <dl>
-            <dt>Eleito / eliminado (mat.)</dt>
-            <dd>garantido ou eliminado quando a folga de votos supera o restante da legenda</dd>
+            <dt>Eleito / fora da margem / eliminado (mat.)</dt>
+            <dd>fora da margem: déficit &gt; votos novos estimados da legenda; eliminado (mat.): sem votos restantes na legenda</dd>
             <dt>Δ%</dt>
             <dd>variação do percentual desde a última leitura (majoritário)</dd>
             <dt>Dist.</dt>
@@ -63,6 +82,7 @@
     </dialog>
 
     <div id="status-banner" class="status-banner" hidden></div>
+    <div id="notifications" class="notifications" aria-live="polite"></div>
     <main id="dashboard" class="dashboard"></main>
     <template id="panel-template">
       <article class="panel">
@@ -111,6 +131,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=33"></script>
+    <script src="/static/app.js?v=44"></script>
   </body>
 </html>

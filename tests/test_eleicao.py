@@ -1,6 +1,7 @@
 import unittest
 
 from extras.eleicao import (
+    apply_garantido_segundo_turno,
     apply_mat_def,
     infer_mat_def,
     infer_mat_def_plurality,
@@ -65,6 +66,43 @@ class TestMatDefSenador(unittest.TestCase):
         ]
         mat_def, _ = infer_mat_def_plurality(cands, 1_000_000, 2)
         self.assertEqual(mat_def, "")
+
+    def test_garantido_segundo_turno_antes_de_mat_def(self):
+        cands = [
+            _cand("A", 39_900_000, 46.0),
+            _cand("B", 35_600_000, 41.0),
+            _cand("C", 6_940_000, 8.0),
+            _cand("D", 4_340_000, 5.0),
+        ]
+        apply_garantido_segundo_turno(cands, 13_200_000, "")
+        self.assertTrue(cands[0]["garantido_turno"])
+        self.assertTrue(cands[1]["garantido_turno"])
+        self.assertFalse(cands[2].get("garantido_turno"))
+
+    def test_garantido_segundo_turno_nao_aplica_se_ja_eleito(self):
+        cands = [
+            _cand("A", 55_000_000, 55.0),
+            _cand("B", 30_000_000, 30.0),
+            _cand("C", 15_000_000, 15.0),
+        ]
+        apply_garantido_segundo_turno(cands, 0, "E")
+        self.assertFalse(cands[0].get("garantido_turno"))
+
+    def test_segundo_turno_marca_os_dois_primeiros(self):
+        cands = [
+            _cand("A", 42_000_000, 42.04),
+            _cand("B", 25_640_000, 25.64),
+            _cand("C", 23_350_000, 23.35),
+        ]
+        cands[1]["viavel"] = False
+        cands[1]["distancia_votos"] = 5_000_000
+        apply_mat_def(cands, "S", CARGO_PRESIDENTE, 1)
+        self.assertEqual(cands[0]["sf_e"], "s")
+        self.assertEqual(cands[1]["sf_e"], "s")
+        self.assertEqual(cands[2]["sf_e"], "n")
+        self.assertIsNone(cands[0]["viavel"])
+        self.assertIsNone(cands[1]["viavel"])
+        self.assertIsNone(cands[1]["distancia_votos"])
 
     def test_governador_usa_segundo_turno(self):
         cands = [

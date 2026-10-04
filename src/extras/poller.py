@@ -3,7 +3,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from extras.eleicao import EleicaoStats, fetch_eleicao_stats
+from extras.eleicao import EleicaoStats, candidatos_track_payload, fetch_eleicao_stats
 from extras.fixtures import MOCK_ENABLED, fetch_mock_panel, reset_mock_state
 from extras.tse_client import resolve_panel
 
@@ -30,6 +30,7 @@ class PollerState:
     sessions: dict[str, ClientSession] = field(default_factory=dict)
     cache: dict[str, dict] = field(default_factory=dict)
     prev_stats: dict[str, EleicaoStats] = field(default_factory=dict)
+    mock_tick: int = 0
     last_tse_poll_at: float | None = None
     last_tse_poll_panels: list[str] = field(default_factory=list)
     tse_poll_total: int = 0
@@ -73,6 +74,7 @@ class ElectionPoller:
         with self._state.lock:
             self._state.cache.clear()
             self._state.prev_stats.clear()
+            self._state.mock_tick = 0
             self._state.last_tse_poll_at = None
             self._state.last_tse_poll_panels = []
             self._state.tse_poll_total = 0
@@ -138,8 +140,13 @@ class ElectionPoller:
             panels = self._merged_panels()
         if not panels:
             return
+        mock_tick = 0
+        if MOCK_ENABLED:
+            with self._state.lock:
+                self._state.mock_tick += 1
+                mock_tick = self._state.mock_tick
         for panel in panels:
-            self._poll_panel(panel)
+            self._poll_panel(panel, mock_tick=mock_tick)
         with self._state.lock:
             self._state.last_tse_poll_at = time.time()
             self._state.last_tse_poll_panels = [panel.key for panel in panels]
@@ -204,15 +211,16 @@ class ElectionPoller:
         sliced["printables"] = printables
         candidatos = entry.get("candidatos")
         if candidatos is not None:
+            sliced["candidatos_track"] = candidatos_track_payload(candidatos)
             sliced["candidatos"] = candidatos[:printables]
         return sliced
 
-    def _poll_panel(self, panel: PanelConfig):
+    def _poll_panel(self, panel: PanelConfig, mock_tick: int = 0):
         panel_key, _, _ = resolve_panel(panel.key)
         if MOCK_ENABLED:
             with self._state.lock:
                 prev_cache = self._state.cache.get(panel_key)
-            entry = fetch_mock_panel(panel_key, panel.printables, prev_cache)
+            entry = fetch_mock_panel(panel_key, prev_cache, mock_tick)
             with self._state.lock:
                 self._state.cache[panel_key] = entry
             return
@@ -220,10 +228,9 @@ class ElectionPoller:
         with self._state.lock:
             prev = self._state.prev_stats.get(panel_key)
 
-        stats, error = fetch_eleicao_stats(prev, panel_key, panel.printables)
+        stats, error = fetch_eleicao_stats(prev, panel_key, -1)
         entry = {
             "key": panel_key,
-            "printables": panel.printables,
             "error": error,
         }
 

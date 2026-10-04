@@ -13,6 +13,33 @@ from extras.tse_client import (
 )
 
 
+CANDIDATO_TRACK_FIELDS = (
+    "nome",
+    "sf_e",
+    "garantido",
+    "garantido_turno",
+    "eliminado_mat",
+    "eliminado_definitivo",
+    "viavel",
+    "dentro_proj",
+    "legenda_sigla",
+    "partido_sg",
+)
+
+
+def candidatos_track_payload(candidatos) -> list[dict]:
+    rows = []
+    for cand in candidatos or []:
+        if isinstance(cand, dict):
+            rows.append({field: cand.get(field) for field in CANDIDATO_TRACK_FIELDS})
+        elif hasattr(cand, "to_dict"):
+            data = cand.to_dict()
+            rows.append({field: data.get(field) for field in CANDIDATO_TRACK_FIELDS})
+        else:
+            rows.append({field: getattr(cand, field, None) for field in CANDIDATO_TRACK_FIELDS})
+    return rows
+
+
 def format_duration(seconds: int | float | None) -> str | None:
     if seconds is None:
         return None
@@ -117,7 +144,14 @@ def apply_mat_def_segundo_turno(candidatos, mat_def: str) -> str:
     if mat_def == "E":
         _set_sf_e(leader, "e")
     elif mat_def == "S":
-        _set_sf_e(leader, "s")
+        for cand in candidatos[:2]:
+            _set_sf_e(cand, "s")
+            if hasattr(cand, "viavel"):
+                cand.viavel = None
+                cand.distancia_votos = None
+            else:
+                cand["viavel"] = None
+                cand["distancia_votos"] = None
     return mat_def
 
 
@@ -138,6 +172,29 @@ def apply_mat_def(candidatos, mat_def: str, cargo_cd: str, qtd_vagas: int) -> st
 
 
 apply_mat_def_majoritario = apply_mat_def_segundo_turno
+
+
+def apply_garantido_segundo_turno(
+    candidatos, aprox_votos_restantes, mat_def: str
+) -> None:
+    """Marca os dois primeiros quando o 3º não pode ultrapassá-los (vaga no 2º turno)."""
+    if not candidatos or mat_def == "E" or len(candidatos) < 3:
+        return
+    restantes = max(0, int(aprox_votos_restantes or 0))
+    third_votos = _cand_votos(candidatos[2])
+    for cand in candidatos[:2]:
+        if hasattr(cand, "garantido_turno"):
+            cand.garantido_turno = False
+        else:
+            cand["garantido_turno"] = False
+        sf_e = cand.sf_e if hasattr(cand, "sf_e") else cand.get("sf_e")
+        if sf_e in ("s", "e"):
+            continue
+        if _cand_votos(cand) - third_votos > restantes:
+            if hasattr(cand, "garantido_turno"):
+                cand.garantido_turno = True
+            else:
+                cand["garantido_turno"] = True
 
 
 class Candidato:
@@ -166,7 +223,9 @@ class Candidato:
         self.dentro_proj = None
         self.legenda_sigla = None
         self.garantido = False
+        self.garantido_turno = False
         self.eliminado_mat = False
+        self.eliminado_definitivo = False
         self.margem_corte = None
         self.margem_folga = None
         self.restantes_legenda = None
@@ -194,7 +253,9 @@ class Candidato:
             "dentro_proj": self.dentro_proj,
             "legenda_sigla": self.legenda_sigla,
             "garantido": self.garantido,
+            "garantido_turno": self.garantido_turno,
             "eliminado_mat": self.eliminado_mat,
+            "eliminado_definitivo": self.eliminado_definitivo,
             "margem_corte": self.margem_corte,
             "margem_folga": self.margem_folga,
             "restantes_legenda": self.restantes_legenda,
@@ -221,6 +282,10 @@ class EleicaoStats:
         self._calc_distancia()
         self._calc_proporcional()
         self._infer_mat_def()
+        if self.segundo_turno:
+            apply_garantido_segundo_turno(
+                self.candidatos, self.aprox_votos_restantes, self.mat_def or ""
+            )
 
     def get_stat(self, key: str, custom_base: dict = None):
         base = self._raw_data if custom_base is None else custom_base

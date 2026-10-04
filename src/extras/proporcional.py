@@ -305,49 +305,144 @@ def _candidatos_dentro(grupo: list) -> list:
     return [cand for cand in _grupo_ordenado(grupo) if _cand_field(cand, "dentro_proj")]
 
 
+def _distribuir_restantes_nacionais(
+    legendas: list[dict], aprox_rest: int, alvo_id: str, share_alvo: float
+) -> dict[str, int]:
+    votes = {legenda["id"]: legenda["votos"] for legenda in legendas}
+    ganho_alvo = int(aprox_rest * share_alvo)
+    votes[alvo_id] += ganho_alvo
+    resto = aprox_rest - ganho_alvo
+    outros = [legenda for legenda in legendas if legenda["id"] != alvo_id]
+    total_out = sum(votes[legenda["id"]] for legenda in outros)
+    if total_out > 0 and resto > 0:
+        for legenda in outros:
+            lid = legenda["id"]
+            votes[lid] += int(resto * votes[lid] / total_out)
+    return votes
+
+
+def min_cadeiras_por_legenda(
+    legendas: list[dict],
+    por_legenda: dict[str, list],
+    vagas: int,
+    vv: int,
+    aprox_votos_restantes: int,
+    seats_atual: dict[str, int],
+) -> dict[str, int]:
+    """Piso de cadeiras por legenda, adversarialmente, com os votos nacionais restantes."""
+    if not aprox_votos_restantes or not vv or not vagas:
+        return {legenda["id"]: seats_atual.get(legenda["id"], 0) for legenda in legendas}
+
+    vv_final = vv + aprox_votos_restantes
+    min_map: dict[str, int] = {}
+    for legenda in legendas:
+        lid = legenda["id"]
+        worst = seats_atual.get(lid, 0)
+        for share in (0.0, 0.25, 0.5, 0.75, 1.0):
+            votes = _distribuir_restantes_nacionais(
+                legendas, aprox_votos_restantes, lid, share
+            )
+            legendas_tmp = [{**legenda, "votos": votes[legenda["id"]]} for legenda in legendas]
+            seats, _ = distribute_cadeiras_tse(legendas_tmp, por_legenda, vagas, vv_final)
+            worst = min(worst, seats.get(lid, 0))
+        for outra in legendas:
+            oid = outra["id"]
+            if oid == lid:
+                continue
+            votes = {legenda["id"]: legenda["votos"] for legenda in legendas}
+            votes[oid] += aprox_votos_restantes
+            legendas_tmp = [{**legenda, "votos": votes[legenda["id"]]} for legenda in legendas]
+            seats, _ = distribute_cadeiras_tse(legendas_tmp, por_legenda, vagas, vv_final)
+            worst = min(worst, seats.get(lid, 0))
+        min_map[lid] = worst
+    return min_map
+
+
+def _colegas_que_podem_passar(votos_ref: int, abaixo: list, rest_leg: int) -> int:
+    if rest_leg <= 0 or not abaixo:
+        return 0
+    gaps = sorted(max(0, votos_ref - _cand_votos(cand) + 1) for cand in abaixo)
+    budget = rest_leg
+    passaram = 0
+    for need in gaps:
+        if need <= 0:
+            passaram += 1
+            continue
+        if budget >= need:
+            budget -= need
+            passaram += 1
+        else:
+            break
+    return passaram
+
+
+def _candidato_garantido(
+    posicao: int,
+    cadeiras_min: int,
+    votos_cand: int,
+    abaixo: list,
+    rest_leg: int,
+) -> bool:
+    if posicao <= 0 or cadeiras_min <= 0 or posicao > cadeiras_min:
+        return False
+    limite_passagens = cadeiras_min - posicao + 1
+    if limite_passagens <= 0:
+        return True
+    return _colegas_que_podem_passar(votos_cand, abaixo, rest_leg) < limite_passagens
+
+
 def apply_garantia_matematica(
     por_legenda: dict[str, list],
     legendas_por_id: dict,
+    legendas: list[dict],
+    seats: dict[str, int],
+    vagas: int,
     aprox_votos_restantes: int,
     vv: int,
 ) -> None:
+    min_seats = min_cadeiras_por_legenda(
+        legendas, por_legenda, vagas, vv, aprox_votos_restantes, seats
+    )
+
     for agr_id, grupo in por_legenda.items():
         for cand in grupo:
             _set_cand_field(cand, "garantido", False)
             _set_cand_field(cand, "eliminado_mat", False)
-
-        dentro = _candidatos_dentro(grupo)
-        cadeiras = len(dentro)
-        if cadeiras <= 0:
-            continue
+            _set_cand_field(cand, "eliminado_definitivo", False)
 
         legenda = legendas_por_id.get(agr_id)
         leg_votos = legenda["votos"] if legenda else 0
         rest_leg = restantes_legenda(aprox_votos_restantes, leg_votos, vv)
+        cadeiras_min = min_seats.get(agr_id, seats.get(agr_id, 0))
+        ordenado = _grupo_ordenado(grupo)
+        dentro = _candidatos_dentro(grupo)
         dentro_ids = {id(c) for c in dentro}
-        primeiro_fora = next(
-            (c for c in _grupo_ordenado(grupo) if id(c) not in dentro_ids),
-            None,
-        )
-        primeiro_fora_votos = _cand_votos(primeiro_fora) if primeiro_fora else 0
 
-        for cand in dentro:
-            if not primeiro_fora and rest_leg <= 0:
-                _set_cand_field(cand, "garantido", True)
+        for posicao, cand in enumerate(ordenado, start=1):
+            _set_cand_field(cand, "cadeiras_min", cadeiras_min)
+            if not _cand_field(cand, "dentro_proj"):
                 continue
-            if not primeiro_fora:
-                continue
-            gap = _cand_votos(cand) - primeiro_fora_votos
-            _set_cand_field(cand, "garantido", gap > rest_leg)
+            abaixo = ordenado[posicao:]
+            garantido = _candidato_garantido(
+                posicao, cadeiras_min, _cand_votos(cand), abaixo, rest_leg
+            )
+            _set_cand_field(cand, "garantido", garantido)
 
-        if not primeiro_fora:
+        if not dentro:
+            if rest_leg <= 0:
+                for cand in ordenado:
+                    _set_cand_field(cand, "eliminado_definitivo", True)
             continue
+
         ultimo_dentro_votos = _cand_votos(dentro[-1])
-        for cand in _grupo_ordenado(grupo):
+        for cand in ordenado:
             if id(cand) in dentro_ids:
                 continue
             gap = ultimo_dentro_votos - _cand_votos(cand)
-            _set_cand_field(cand, "eliminado_mat", gap > rest_leg)
+            if rest_leg <= 0:
+                _set_cand_field(cand, "eliminado_definitivo", gap > 0)
+            else:
+                _set_cand_field(cand, "eliminado_mat", gap > rest_leg)
 
 
 def apply_proporcional(
@@ -405,7 +500,13 @@ def apply_proporcional(
         _set_cand_field(cand, "legenda_sigla", legenda["sigla"] if legenda else par_sg)
 
     apply_garantia_matematica(
-        por_legenda, legendas_por_id, aprox_votos_restantes, vv
+        por_legenda,
+        legendas_por_id,
+        legendas,
+        seats,
+        vagas,
+        aprox_votos_restantes,
+        vv,
     )
     apply_margem_corte(por_legenda, legendas_por_id, aprox_votos_restantes, vv)
     apply_perigo_vaga(por_legenda)
@@ -469,7 +570,11 @@ def apply_perigo_vaga(por_legenda: dict[str, list]) -> None:
             continue
 
         cand = dentro[-1]
-        if _cand_field(cand, "garantido") or _cand_field(cand, "eliminado_mat"):
+        if (
+            _cand_field(cand, "garantido")
+            or _cand_field(cand, "eliminado_mat")
+            or _cand_field(cand, "eliminado_definitivo")
+        ):
             continue
 
         margem = _cand_field(cand, "margem_corte")

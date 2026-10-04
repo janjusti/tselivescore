@@ -1,11 +1,15 @@
 import unittest
 
+from extras.fixtures import fetch_mock_panel, reset_mock_state
 from extras.proporcional import (
+    _candidato_garantido,
+    _colegas_que_podem_passar,
     _legenda_sigla,
     apply_proporcional,
     calc_quociente_eleitoral,
     calc_quociente_partidario,
     distribute_cadeiras_tse,
+    min_cadeiras_por_legenda,
     min_votos_frac,
 )
 
@@ -134,6 +138,40 @@ class TestDistribuicaoTse(unittest.TestCase):
         }
         seats, _ = distribute_cadeiras_tse(legendas, por_legenda, vagas=2, vv=1_000)
         self.assertEqual(sum(seats.values()), 2)
+
+
+class TestGarantiaMatematica(unittest.TestCase):
+    def test_colegas_que_podem_passar_greedy(self):
+        abaixo = [_cand("B", 4_000_000), _cand("C", 3_500_000)]
+        self.assertEqual(_colegas_que_podem_passar(5_000_000, abaixo, 0), 0)
+        self.assertEqual(_colegas_que_podem_passar(5_000_000, abaixo, 1_500_000), 1)
+        self.assertEqual(_colegas_que_podem_passar(5_000_000, abaixo, 3_500_000), 2)
+
+    def test_lider_nao_garantido_se_dois_colegas_alcancam(self):
+        abaixo = [_cand("B", 4_950_000), _cand("C", 4_550_000), _cand("D", 1_460_000)]
+        self.assertEqual(_colegas_que_podem_passar(6_500_000, abaixo, 4_040_000), 2)
+        self.assertFalse(
+            _candidato_garantido(1, 2, 6_500_000, abaixo, 4_040_000),
+        )
+
+    def test_mock_pl1_nao_garantido_em_81_porcento(self):
+        reset_mock_state()
+        prev = None
+        for tick in range(1, 31):
+            prev = fetch_mock_panel("rn:6", prev, tick)
+        pl1 = next(c for c in prev["candidatos"] if c["nome"] == "Dep. PL 1")
+        self.assertEqual(prev["perc_sec_totalizadas"], 81.2)
+        self.assertEqual(pl1.get("cadeiras_proj"), 3)
+        self.assertEqual(pl1.get("cadeiras_min"), 2)
+        self.assertFalse(pl1.get("garantido"))
+
+    def test_mock_pl1_garantido_em_100_porcento(self):
+        reset_mock_state()
+        prev = None
+        for tick in range(1, 38):
+            prev = fetch_mock_panel("rn:6", prev, tick)
+        pl1 = next(c for c in prev["candidatos"] if c["nome"] == "Dep. PL 1")
+        self.assertTrue(pl1.get("garantido"))
 
 
 if __name__ == "__main__":
