@@ -546,11 +546,30 @@ function getSessionId() {
   return id;
 }
 
-function createDefaultPanels() {
-  return DEFAULT_PANEL_KEYS.map((key) => ({
+async function fetchDefaultPrintables(key) {
+  if (!key) return meta.min_printables || 5;
+  if (!meta.printablesCache) meta.printablesCache = {};
+  if (meta.printablesCache[key] != null) return meta.printablesCache[key];
+  try {
+    const res = await fetch(apiUrl(`/api/panel-defaults?key=${encodeURIComponent(key)}`));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    meta.printablesCache[key] = data.printables;
+    return data.printables;
+  } catch (err) {
+    console.warn("default printables:", err);
+    return meta.min_printables || 5;
+  }
+}
+
+async function createDefaultPanels() {
+  const printablesList = await Promise.all(
+    DEFAULT_PANEL_KEYS.map((key) => fetchDefaultPrintables(key))
+  );
+  return DEFAULT_PANEL_KEYS.map((key, index) => ({
     id: uid(),
     key,
-    printables: 5,
+    printables: printablesList[index],
   }));
 }
 
@@ -561,19 +580,29 @@ function migratePanel(panel) {
   return { ...panel, key: "br:1" };
 }
 
-function loadState() {
+async function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    panels = createDefaultPanels();
+    panels = await createDefaultPanels();
     return;
   }
   try {
     const data = JSON.parse(raw);
-    panels = (data.panels?.length ? data.panels : createDefaultPanels()).map(migratePanel);
+    panels = (data.panels?.length ? data.panels : await createDefaultPanels()).map(migratePanel);
     waitInput.value = Math.max(data.wait ?? meta.default_wait, meta.min_wait);
   } catch {
-    panels = createDefaultPanels();
+    panels = await createDefaultPanels();
   }
+}
+
+function minPrintables() {
+  return meta.min_printables || 5;
+}
+
+async function updatePrintablesInputDefault() {
+  const key = buildPanelKey();
+  if (!key || !printablesInput) return;
+  printablesInput.value = await fetchDefaultPrintables(key);
 }
 
 function clampWait(value) {
@@ -802,7 +831,7 @@ function renderPanels() {
       sendHeartbeat();
     });
     node.querySelector(".panel-printables").addEventListener("change", (e) => {
-      panel.printables = Number(e.target.value) || 5;
+      panel.printables = Number(e.target.value) || minPrintables();
       saveState();
       sendHeartbeat();
     });
@@ -1519,7 +1548,8 @@ async function init() {
   waitInput.min = meta.min_wait;
   waitInput.value = Math.max(meta.default_wait, meta.min_wait);
   fillCategorySelect();
-  loadState();
+  printablesInput.min = String(minPrintables());
+  await loadState();
   updateAudioToggleUI();
   setTvMode(isTvMode());
   setupAudioUnlock();
@@ -1537,6 +1567,7 @@ async function init() {
 }
 
 document.getElementById("add-panel-btn").addEventListener("click", () => {
+  updatePrintablesInputDefault();
   addDialog.showModal();
 });
 
@@ -1544,12 +1575,16 @@ document.getElementById("cancel-add-btn").addEventListener("click", () => {
   addDialog.close();
 });
 
-categorySelect.addEventListener("change", updateUfVisibility);
+categorySelect.addEventListener("change", () => {
+  updateUfVisibility();
+  updatePrintablesInputDefault();
+});
+ufSelect.addEventListener("change", updatePrintablesInputDefault);
 
 addForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const key = buildPanelKey();
-  const printables = Number(printablesInput.value) || 5;
+  const printables = Number(printablesInput.value) || minPrintables();
   if (!key) return;
   if (panels.some((p) => p.key === key)) {
     alert("Esse painel já está no dashboard.");

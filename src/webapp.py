@@ -7,6 +7,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from extras.fixtures import MOCK_ENABLED
+from extras.panel_defaults import (
+    MAX_DEFAULT_PRINTABLES,
+    MIN_PANEL_PRINTABLES,
+    default_printables_for_panel,
+    qtd_vagas_for_panel,
+)
 from extras.poller import MIN_WAIT_SECONDS, SESSION_TTL_SECONDS, ElectionPoller, PanelConfig
 from extras.ratelimit import build_rate_limiter, client_ip
 from extras.tse_client import UFS, dashboard_categories, resolve_panel
@@ -62,6 +68,19 @@ def meta():
         "min_wait": MIN_WAIT_SECONDS,
         "session_ttl_seconds": SESSION_TTL_SECONDS,
         "mock": MOCK_ENABLED,
+        "min_printables": MIN_PANEL_PRINTABLES,
+        "max_default_printables": MAX_DEFAULT_PRINTABLES,
+    }
+
+
+@app.get("/api/panel-defaults")
+def panel_defaults(key: str):
+    panel_key, _, _ = resolve_panel(key)
+    vagas = qtd_vagas_for_panel(panel_key)
+    return {
+        "key": panel_key,
+        "qtd_vagas": vagas,
+        "printables": default_printables_for_panel(panel_key),
     }
 
 
