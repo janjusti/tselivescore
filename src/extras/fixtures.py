@@ -36,6 +36,17 @@ def _scenario(panel_key: str) -> dict:
                 {"nome": "Candidato D", "share": 0.05, "drift": 0.0, "sf_e": "n"},
             ],
         }
+    if cargo == "5":
+        return {
+            "qtd_vagas": 2,
+            "candidates": [
+                {"nome": f"Sen. {uf.upper()} A", "share": 0.34, "drift": 0.0012, "sf_e": "n"},
+                {"nome": f"Sen. {uf.upper()} B", "share": 0.31, "drift": -0.0008, "sf_e": "n"},
+                {"nome": f"Sen. {uf.upper()} C", "share": 0.20, "drift": 0.0005, "sf_e": "n"},
+                {"nome": f"Sen. {uf.upper()} D", "share": 0.09, "drift": 0.0, "sf_e": "n"},
+                {"nome": f"Sen. {uf.upper()} E", "share": 0.06, "drift": 0.0, "sf_e": "n"},
+            ],
+        }
     if cargo in ("6", "7", "8"):
         return {
             "qtd_vagas": 8,

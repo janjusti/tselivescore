@@ -9,6 +9,7 @@ ELEICAO_ESTADUAL = "6259"
 
 CARGO_PRESIDENTE = "1"
 CARGO_GOVERNADOR = "3"
+CARGO_SENADOR = "5"
 CARGO_DEP_FEDERAL = "6"
 CARGO_DEP_ESTADUAL = "7"
 CARGO_DEP_DISTRITAL = "8"
@@ -16,12 +17,13 @@ CARGO_DEP_DISTRITAL = "8"
 CARGO_LABELS = {
     CARGO_PRESIDENTE: "Presidente",
     CARGO_GOVERNADOR: "Governador",
+    CARGO_SENADOR: "Senador",
     CARGO_DEP_FEDERAL: "Deputado Federal",
     CARGO_DEP_ESTADUAL: "Deputado Estadual",
     CARGO_DEP_DISTRITAL: "Deputado Distrital",
 }
 
-CARGOS_MAJORITARIOS = {CARGO_PRESIDENTE, CARGO_GOVERNADOR}
+CARGOS_MAJORITARIOS = {CARGO_PRESIDENTE, CARGO_GOVERNADOR, CARGO_SENADOR}
 CARGOS_PROPORCIONAIS = {CARGO_DEP_FEDERAL, CARGO_DEP_ESTADUAL, CARGO_DEP_DISTRITAL}
 
 UFS = [
@@ -141,6 +143,13 @@ def dashboard_categories() -> list[dict]:
             "singular": "Governador",
             "requires_uf": True,
             "cargo": CARGO_GOVERNADOR,
+        },
+        {
+            "id": "senador",
+            "label": "Senadores",
+            "singular": "Senador",
+            "requires_uf": True,
+            "cargo": CARGO_SENADOR,
         },
         {
             "id": "dep_federal",

@@ -48,6 +48,7 @@ No VS Code ou Cursor, instale a extensão [Dev Containers](https://marketplace.v
 |--------------|--------------|--------------------|-------------|
 | `br:1`       | `br`         | Presidência        | 6257        |
 | `<uf>:3`     | `<uf>`       | Governador         | 6259        |
+| `<uf>:5`     | —            | Senador            | 6259        |
 | `<uf>:6`     | —            | Deputado Federal   | 6259        |
 | `<uf>:7`     | —            | Deputado Estadual  | 6259        |
 | `df:7`       | —            | Deputado Distrital | 6259        |
