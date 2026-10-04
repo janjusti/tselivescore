@@ -10,6 +10,7 @@ const toolbarMetrics = document.getElementById("toolbar-metrics");
 const audioToggle = document.getElementById("audio-toggle");
 const tvToggle = document.getElementById("tv-toggle");
 const notificationsEl = document.getElementById("notifications");
+const eventLogListEl = document.getElementById("event-log-list");
 const waitInput = document.getElementById("wait-input");
 const addDialog = document.getElementById("add-dialog");
 const addForm = document.getElementById("add-form");
@@ -46,6 +47,13 @@ const UPDATE_FRESHNESS_WINDOW_S = 30;
 const UPDATE_LIVE_THRESHOLD_S = 15;
 const NOTIFICATION_TTL_MS = 12000;
 const NOTIFICATION_MAX = 8;
+const EVENT_LOG_MAX = 30;
+const EVENT_LOG_AGE_REFRESH_MS = 15000;
+const PRINTABLES_HARD_MAX = 50;
+
+let eventLog = [];
+const panelMaxPrintables = new Map();
+let eventLogAgeTimer = null;
 const DELTA_ROLLING_MAX_TICKS = 12;
 const DELTA_ROLLING_MIN_TICKS = 2;
 const DEFAULT_PANEL_KEYS = ["br:1", "rn:3", "rn:5", "rn:6", "rn:7"];
@@ -345,11 +353,95 @@ function emitSeatSwapEvents(saiu, entrou, panelTitle, events) {
   }
 }
 
+function formatEventAge(timestamp) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 5) return "agora";
+  if (seconds < 60) return `há ${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `há ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return new Date(timestamp).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function appendEventLog(event) {
+  const meta = EVENT_META[event.type] || { label: "Evento", tone: "" };
+  eventLog.unshift({
+    id: uid(),
+    at: Date.now(),
+    type: event.type,
+    label: meta.label,
+    tone: meta.tone || "default",
+    panelTitle: event.panelTitle,
+    subject: event.subject,
+    detail: event.detail || null,
+  });
+  if (eventLog.length > EVENT_LOG_MAX) {
+    eventLog.length = EVENT_LOG_MAX;
+  }
+  renderEventLog();
+}
+
+function renderEventLog() {
+  if (!eventLogListEl) return;
+  if (!eventLog.length) {
+    eventLogListEl.innerHTML = '<p class="event-log-empty">Nenhum evento ainda.</p>';
+    return;
+  }
+  eventLogListEl.innerHTML = eventLog
+    .map((entry) => {
+      const detail = entry.detail
+        ? `<div class="event-log-detail">${entry.detail}</div>`
+        : "";
+      return `
+        <article class="event-log-item event-log-${entry.tone}" data-id="${entry.id}">
+          <div class="event-log-meta">
+            <span class="event-log-type">${entry.label}</span>
+            <time class="event-log-age" datetime="${new Date(entry.at).toISOString()}">${formatEventAge(entry.at)}</time>
+          </div>
+          <div class="event-log-panel">${entry.panelTitle}</div>
+          <div class="event-log-subject">${entry.subject}</div>
+          ${detail}
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function scheduleEventLogAgeRefresh() {
+  if (eventLogAgeTimer) return;
+  eventLogAgeTimer = window.setInterval(() => {
+    if (!eventLog.length) return;
+    renderEventLog();
+  }, EVENT_LOG_AGE_REFRESH_MS);
+}
+
+function isEventLogVisible() {
+  return window.matchMedia("(min-width: 901px)").matches;
+}
+
+function dismissNotification(el) {
+  if (!el) return;
+  if (el._dismissTimer) {
+    window.clearTimeout(el._dismissTimer);
+    el._dismissTimer = null;
+  }
+  el.classList.add("notification-out");
+  window.setTimeout(() => el.remove(), 180);
+}
+
 function showNotification(event) {
-  if (!notificationsEl) return;
+  appendEventLog(event);
+  if (!notificationsEl || isEventLogVisible()) return;
   const meta = EVENT_META[event.type] || { label: "Evento", tone: "" };
   const el = document.createElement("div");
   el.className = `notification notification-${meta.tone || "default"}`;
+  el.title = "Clique para dispensar";
   const detail = event.detail ? `<div class="notification-detail">${event.detail}</div>` : "";
   el.innerHTML = `
     <div class="notification-type">${meta.label}</div>
@@ -357,11 +449,14 @@ function showNotification(event) {
     <div class="notification-subject">${event.subject}</div>
     ${detail}
   `;
+  el.addEventListener("click", () => dismissNotification(el));
   notificationsEl.appendChild(el);
   while (notificationsEl.children.length > NOTIFICATION_MAX) {
-    notificationsEl.firstElementChild?.remove();
+    const oldest = notificationsEl.firstElementChild;
+    if (oldest?._dismissTimer) window.clearTimeout(oldest._dismissTimer);
+    oldest?.remove();
   }
-  window.setTimeout(() => el.remove(), NOTIFICATION_TTL_MS);
+  el._dismissTimer = window.setTimeout(() => dismissNotification(el), NOTIFICATION_TTL_MS);
 }
 
 function detectElectionEvents(panelsData) {
@@ -599,10 +694,52 @@ function minPrintables() {
   return meta.min_printables || 5;
 }
 
+function maxPrintablesFromData(data) {
+  const total = Number(data?.qtd_candidatos);
+  if (!Number.isFinite(total) || total <= 0) return PRINTABLES_HARD_MAX;
+  return Math.min(PRINTABLES_HARD_MAX, total);
+}
+
+function maxPrintablesForKey(panelKey, data) {
+  if (data && !data.error) {
+    const fromData = maxPrintablesFromData(data);
+    panelMaxPrintables.set(panelKey, fromData);
+    return fromData;
+  }
+  return panelMaxPrintables.get(panelKey) || PRINTABLES_HARD_MAX;
+}
+
+function clampPrintables(value, max) {
+  const cap = Math.min(PRINTABLES_HARD_MAX, max || PRINTABLES_HARD_MAX);
+  const n = Number(value);
+  const parsed = Number.isFinite(n) ? n : 0;
+  return Math.min(cap, Math.max(0, parsed));
+}
+
+function syncPanelPrintablesLimit(panelEl, panel, data) {
+  const input = panelEl.querySelector(".panel-printables");
+  if (!input || !panel) return false;
+  const max = maxPrintablesForKey(panel.key, data);
+  input.min = "0";
+  input.max = String(max);
+  const clamped = clampPrintables(panel.printables, max);
+  let changed = false;
+  if (clamped !== panel.printables) {
+    panel.printables = clamped;
+    changed = true;
+  }
+  input.value = panel.printables;
+  return changed;
+}
+
 async function updatePrintablesInputDefault() {
   const key = buildPanelKey();
   if (!key || !printablesInput) return;
-  printablesInput.value = await fetchDefaultPrintables(key);
+  const max = panelMaxPrintables.get(key) || PRINTABLES_HARD_MAX;
+  printablesInput.min = "0";
+  printablesInput.max = String(max);
+  const suggested = await fetchDefaultPrintables(key);
+  printablesInput.value = Math.min(suggested, max);
 }
 
 function clampWait(value) {
@@ -831,7 +968,10 @@ function renderPanels() {
       sendHeartbeat();
     });
     node.querySelector(".panel-printables").addEventListener("change", (e) => {
-      panel.printables = Number(e.target.value) || minPrintables();
+      const input = e.target;
+      const max = Number(input.max) || PRINTABLES_HARD_MAX;
+      panel.printables = clampPrintables(input.value, max);
+      input.value = panel.printables;
       saveState();
       sendHeartbeat();
     });
@@ -1466,11 +1606,17 @@ function renderDashboardData(data) {
   updateRollingPercHistory(data.panels);
   detectElectionEvents(data.panels);
   detectPanelUpdates(data.panels);
+  let printablesClamped = false;
   for (const panel of panels) {
     const panelEl = dashboardEl.querySelector(`[data-id="${panel.id}"]`);
     if (!panelEl) continue;
-    renderPanelData(panelEl, data.panels?.[panel.key], panel.key);
+    const panelData = data.panels?.[panel.key];
+    renderPanelData(panelEl, panelData, panel.key);
+    if (syncPanelPrintablesLimit(panelEl, panel, panelData)) {
+      printablesClamped = true;
+    }
   }
+  if (printablesClamped) sendHeartbeat();
   renderToolbarMetrics(data.panels);
 }
 
@@ -1548,7 +1694,10 @@ async function init() {
   waitInput.min = meta.min_wait;
   waitInput.value = Math.max(meta.default_wait, meta.min_wait);
   fillCategorySelect();
-  printablesInput.min = String(minPrintables());
+  printablesInput.min = "0";
+  sessionStorage.removeItem("tselivescore-event-log");
+  renderEventLog();
+  scheduleEventLogAgeRefresh();
   await loadState();
   updateAudioToggleUI();
   setTvMode(isTvMode());
@@ -1584,8 +1733,9 @@ ufSelect.addEventListener("change", updatePrintablesInputDefault);
 addForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const key = buildPanelKey();
-  const printables = Number(printablesInput.value) || minPrintables();
   if (!key) return;
+  const max = panelMaxPrintables.get(key) || PRINTABLES_HARD_MAX;
+  const printables = clampPrintables(printablesInput.value, max);
   if (panels.some((p) => p.key === key)) {
     alert("Esse painel já está no dashboard.");
     return;

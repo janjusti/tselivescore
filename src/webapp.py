@@ -34,7 +34,7 @@ rate_limiter = build_rate_limiter()
 class PanelRequest(BaseModel):
     id: str
     key: str
-    printables: int = Field(default=5, ge=1, le=50)
+    printables: int = Field(default=5, ge=0, le=50)
 
     @field_validator("key")
     @classmethod

@@ -10,7 +10,7 @@ from extras.tse_client import (
 )
 
 MIN_PANEL_PRINTABLES = 5
-MAX_DEFAULT_PRINTABLES = 15
+MAX_DEFAULT_PRINTABLES = 12
 
 # Cadeiras na Câmara dos Deputados por UF (eleição 2022, vigente em 2026).
 VAGAS_DEP_FEDERAL = {
