@@ -48,6 +48,36 @@ UF_TSE_TIMEZONE = {
 }
 TZ_BRASILIA = "America/Sao_Paulo"
 
+REGIOES_BR = {
+    "norte": ["ac", "am", "ap", "pa", "ro", "rr", "to"],
+    "nordeste": ["al", "ba", "ce", "ma", "pb", "pe", "pi", "rn", "se"],
+    "centro-oeste": ["df", "go", "ms", "mt"],
+    "sudeste": ["es", "mg", "rj", "sp"],
+    "sul": ["pr", "rs", "sc"],
+}
+
+REGIAO_LABELS = {
+    "norte": "Norte",
+    "nordeste": "Nordeste",
+    "centro-oeste": "Centro-Oeste",
+    "sudeste": "Sudeste",
+    "sul": "Sul",
+    "exterior": "Exterior",
+}
+
+REGIAO_ORDER = [
+    "norte",
+    "nordeste",
+    "centro-oeste",
+    "sudeste",
+    "sul",
+    "exterior",
+]
+
+UF_TO_REGIAO = {
+    uf: regiao for regiao, ufs in REGIOES_BR.items() for uf in ufs
+}
+
 
 def tse_timezone_for_panel(panel_key: str) -> ZoneInfo:
     _, uf, _ = resolve_panel(panel_key)
@@ -146,6 +176,74 @@ def build_url(key: str) -> tuple[str, str, str]:
         f"{uf}-c{cargo_file}-e00{eleicao}-u.jws"
     )
     return panel_title(uf, cargo_cd), url, cargo_cd
+
+
+def build_acompanhamento_br_url() -> str:
+    return f"{TSE_BASE_URL}/{ELEICAO_FEDERAL}/dados/br/br-e00{ELEICAO_FEDERAL}-ab.json"
+
+
+def parse_tse_num(value) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).strip().replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _sec_counts(ab_entry: dict) -> tuple[int, int]:
+    sec = ab_entry.get("s") or {}
+    total = int(parse_tse_num(sec.get("ts")) or 0)
+    done = int(parse_tse_num(sec.get("st")) or 0)
+    return done, total
+
+
+def apuracao_por_regiao(ab_payload: dict | None) -> list[dict]:
+    """Agrega % de seções totalizadas (EA14) por macro-região do Brasil."""
+    if not ab_payload:
+        return []
+
+    by_uf: dict[str, tuple[int, int]] = {}
+    for abr in ab_payload.get("abr") or []:
+        if (abr.get("tpabr") or "").lower() != "uf":
+            continue
+        uf = (abr.get("cdabr") or "").lower()
+        if not uf:
+            continue
+        by_uf[uf] = _sec_counts(abr)
+
+    totals = {reg: [0, 0] for reg in REGIOES_BR}
+    exterior = [0, 0]
+
+    for uf, (done, total) in by_uf.items():
+        if uf == "zz":
+            exterior[0] += done
+            exterior[1] += total
+            continue
+        regiao = UF_TO_REGIAO.get(uf)
+        if not regiao:
+            continue
+        totals[regiao][0] += done
+        totals[regiao][1] += total
+
+    rows = []
+    for reg_id in REGIAO_ORDER:
+        if reg_id == "exterior":
+            done, total = exterior
+        else:
+            done, total = totals[reg_id]
+        if total <= 0:
+            continue
+        rows.append(
+            {
+                "id": reg_id,
+                "label": REGIAO_LABELS[reg_id],
+                "perc_apurado": round(done * 100 / total, 2),
+            }
+        )
+    return rows
 
 
 def dashboard_categories() -> list[dict]:

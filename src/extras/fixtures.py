@@ -11,7 +11,15 @@ from extras.eleicao import (
     infer_mat_def,
 )
 from extras.proporcional import apply_proporcional, infer_mat_def_proporcional
-from extras.tse_client import CARGOS_MAJORITARIOS, CARGOS_SEGUNDO_TURNO, panel_title, resolve_panel
+from extras.tse_client import (
+    CARGO_PRESIDENTE,
+    CARGOS_MAJORITARIOS,
+    CARGOS_SEGUNDO_TURNO,
+    REGIAO_LABELS,
+    REGIAO_ORDER,
+    panel_title,
+    resolve_panel,
+)
 
 MOCK_ENABLED = os.environ.get("TSELIVESCORE_MOCK", "").lower() in ("1", "true", "yes")
 
@@ -44,6 +52,30 @@ def _perc_apurado(mock_tick: int) -> float:
     if mock_tick <= 1:
         return 0.0
     return min(100.0, (mock_tick - 1) * _APURACAO_STEP)
+
+
+def _apuracao_regioes_mock(perc_apurado: float) -> list[dict]:
+    if perc_apurado <= 0:
+        return []
+    offsets = {
+        "norte": -6,
+        "nordeste": -10,
+        "centro-oeste": 4,
+        "sudeste": 2,
+        "sul": 8,
+        "exterior": -18,
+    }
+    rows = []
+    for reg_id in REGIAO_ORDER:
+        perc = max(0.0, min(100.0, perc_apurado + offsets.get(reg_id, 0)))
+        rows.append(
+            {
+                "id": reg_id,
+                "label": REGIAO_LABELS[reg_id],
+                "perc_apurado": round(perc, 2),
+            }
+        )
+    return rows
 
 
 def _dep_shares(mock_tick: int) -> dict[str, float]:
@@ -423,6 +455,11 @@ def fetch_mock_panel(
             "proporcional": proporcional,
             "segundo_turno": segundo_turno,
             "maioria_1t": maioria_1t,
+            "apuracao_regioes": (
+                _apuracao_regioes_mock(perc_apurado)
+                if cargo == CARGO_PRESIDENTE
+                else None
+            ),
             "legendas_resumo": legendas_resumo,
             "qtd_vagas": qtd_vagas,
             "qtd_candidatos": len(candidatos),

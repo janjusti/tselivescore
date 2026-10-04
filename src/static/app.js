@@ -1496,6 +1496,31 @@ function formatMaioria1tTitle(maioria1t, restantesFull, distSegundo) {
   );
 }
 
+const REGIAO_SHORT = {
+  norte: "N",
+  nordeste: "NE",
+  "centro-oeste": "CO",
+  sudeste: "SE",
+  sul: "S",
+  exterior: "Ext",
+};
+
+function appendApuracaoRegioes(statsEl, regioes) {
+  if (!regioes?.length) return;
+  const row = document.createElement("div");
+  row.className = "panel-stat-line panel-stat-regioes";
+  row.title = "Apuração por região (% de seções totalizadas)";
+  for (const item of regioes) {
+    const chip = document.createElement("span");
+    chip.className = "panel-regiao-chip";
+    const short = REGIAO_SHORT[item.id] || item.label;
+    const pct = Number(item.perc_apurado);
+    chip.textContent = Number.isFinite(pct) ? `${short} ${pct.toFixed(0)}%` : short;
+    row.appendChild(chip);
+  }
+  statsEl.appendChild(row);
+}
+
 function renderPanelStats(statsEl, data, pct, isProporcional) {
   if (!statsEl) return;
 
@@ -1504,20 +1529,22 @@ function renderPanelStats(statsEl, data, pct, isProporcional) {
     return;
   }
 
-  const lines = [];
+  statsEl.replaceChildren();
+
   const restantes = Number(data.aprox_votos_restantes) || 0;
   if (pct < 100 && restantes > 0) {
-    lines.push(`Restantes: ~${formatCompact(restantes)}`);
-  }
-  if (data.mock && data.mock_tick != null) {
-    lines.push(`roteiro #${data.mock_tick}`);
-  }
-
-  statsEl.textContent = "";
-  for (const line of lines) {
     const row = document.createElement("div");
     row.className = "panel-stat-line";
-    row.textContent = line;
+    row.textContent = `Restantes: ~${formatCompact(restantes)}`;
+    statsEl.appendChild(row);
+  }
+
+  appendApuracaoRegioes(statsEl, data.apuracao_regioes);
+
+  if (data.mock && data.mock_tick != null) {
+    const row = document.createElement("div");
+    row.className = "panel-stat-line";
+    row.textContent = `roteiro #${data.mock_tick}`;
     statsEl.appendChild(row);
   }
 }

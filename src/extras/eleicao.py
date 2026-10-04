@@ -4,9 +4,12 @@ from zoneinfo import ZoneInfo
 from extras import torequests
 from extras.proporcional import apply_proporcional, infer_mat_def_proporcional
 from extras.tse_client import (
+    CARGO_PRESIDENTE,
     CARGOS_MAJORITARIOS,
     CARGOS_PROPORCIONAIS,
     CARGOS_SEGUNDO_TURNO,
+    apuracao_por_regiao,
+    build_acompanhamento_br_url,
     build_url,
     normalize_payload,
     parse_response,
@@ -424,6 +427,7 @@ class EleicaoStats:
             )
         self._calc_distancia()
         self._calc_maioria_1t()
+        self.apuracao_regioes = None
 
     def get_stat(self, key: str, custom_base: dict = None):
         base = self._raw_data if custom_base is None else custom_base
@@ -657,6 +661,7 @@ class EleicaoStats:
             "proporcional": self.proporcional,
             "segundo_turno": self.segundo_turno,
             "maioria_1t": self.maioria_1t,
+            "apuracao_regioes": self.apuracao_regioes,
             "legendas_resumo": self.legendas_resumo,
             "qtd_vagas": self.qtd_vagas,
             "qtd_candidatos": len(self.candidatos),
@@ -678,4 +683,13 @@ def fetch_eleicao_stats(prev_stats, panel_key: str, qtd_printable: int = 5):
         return None, f"erro ao processar resposta: {exc}"
 
     stats = EleicaoStats(prev_stats, raw_data, qtd_printable, titulo, panel_key)
+    if cargo_cd == CARGO_PRESIDENTE:
+        ab_req = torequests.execute(build_acompanhamento_br_url(), "GET")
+        if ab_req["status"] == "ok":
+            try:
+                stats.apuracao_regioes = apuracao_por_regiao(
+                    parse_response(ab_req["req"].text)
+                )
+            except Exception:
+                pass
     return stats, None

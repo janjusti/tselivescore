@@ -616,6 +616,20 @@ button:hover {
   line-height: 1.35;
 }
 
+.panel-stat-regioes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-regiao-chip {
+  white-space: nowrap;
+}
+
 .panel-stats:empty {
   display: none;
 }
