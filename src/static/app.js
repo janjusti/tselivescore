@@ -32,6 +32,9 @@ let heartbeatTimer = null;
 let freshnessTimer = null;
 let columnFitObserver = null;
 let sessionId = null;
+let cachedPanelsData = {};
+const panelRevs = {};
+const panelRevsPrintables = {};
 const prevDeltas = new Map();
 const panelTickHistory = new Map();
 const prevMockTick = new Map();
@@ -299,8 +302,56 @@ function isSnapshotEliminated(snap, isProporcional, isMajoritario) {
 }
 
 function trackingCandidates(data) {
-  if (data?.candidatos_track?.length) return data.candidatos_track;
-  return data?.candidatos || [];
+  const visible = data?.candidatos || [];
+  const track = data?.candidatos_track;
+  if (!track?.length) return visible;
+  return visible.concat(track);
+}
+
+function sessionRevsPayload() {
+  const revs = {};
+  for (const panel of panels) {
+    if (
+      panelRevsPrintables[panel.key] === panel.printables &&
+      panelRevs[panel.key] != null
+    ) {
+      revs[panel.key] = panelRevs[panel.key];
+    }
+  }
+  return revs;
+}
+
+function applySessionPanelRevs(data) {
+  if (!data?.panel_revs) return;
+  for (const [key, rev] of Object.entries(data.panel_revs)) {
+    panelRevs[key] = rev;
+    const panel = panels.find((p) => p.key === key);
+    if (panel) panelRevsPrintables[key] = panel.printables;
+  }
+}
+
+function mergeSessionPanels(data) {
+  applySessionPanelRevs(data);
+  const merged = { ...cachedPanelsData };
+  for (const [key, val] of Object.entries(data.panels || {})) {
+    if (val != null) merged[key] = val;
+  }
+  const activeKeys = new Set(panels.map((p) => p.key));
+  for (const key of Object.keys(merged)) {
+    if (!activeKeys.has(key)) {
+      delete merged[key];
+      delete panelRevs[key];
+      delete panelRevsPrintables[key];
+    }
+  }
+  cachedPanelsData = merged;
+  return { ...data, panels: merged };
+}
+
+function resetSessionPanelCache() {
+  cachedPanelsData = {};
+  for (const key of Object.keys(panelRevs)) delete panelRevs[key];
+  for (const key of Object.keys(panelRevsPrintables)) delete panelRevsPrintables[key];
 }
 
 function candSnapshot(cand, idx, qtdVagas, isMajoritario) {
@@ -970,7 +1021,11 @@ function renderPanels() {
     node.querySelector(".panel-title").textContent = panelLabel(panel.key);
     node.querySelector(".panel-printables").value = panel.printables;
     node.querySelector(".panel-remove").addEventListener("click", () => {
+      const removedKey = panel.key;
       panels = panels.filter((p) => p.id !== panel.id);
+      delete cachedPanelsData[removedKey];
+      delete panelRevs[removedKey];
+      delete panelRevsPrintables[removedKey];
       saveState();
       renderPanels();
       sendHeartbeat();
@@ -1727,21 +1782,22 @@ function updateRollingPercHistory(panelsData) {
 
 function renderDashboardData(data) {
   if (!data) return;
-  updateRollingPercHistory(data.panels);
-  detectElectionEvents(data.panels);
-  detectPanelUpdates(data.panels);
+  const payload = mergeSessionPanels(data);
+  updateRollingPercHistory(payload.panels);
+  detectElectionEvents(payload.panels);
+  detectPanelUpdates(payload.panels);
   let printablesClamped = false;
   for (const panel of panels) {
     const panelEl = dashboardEl.querySelector(`[data-id="${panel.id}"]`);
     if (!panelEl) continue;
-    const panelData = data.panels?.[panel.key];
+    const panelData = payload.panels?.[panel.key];
     renderPanelData(panelEl, panelData, panel.key);
     if (syncPanelPrintablesLimit(panelEl, panel, panelData)) {
       printablesClamped = true;
     }
   }
   if (printablesClamped) sendHeartbeat();
-  renderToolbarMetrics(data.panels);
+  renderToolbarMetrics(payload.panels);
 }
 
 async function sendHeartbeat() {
@@ -1751,6 +1807,7 @@ async function sendHeartbeat() {
     session_id: sessionId,
     panels,
     wait: clampWait(waitInput.value),
+    revs: sessionRevsPayload(),
   };
 
   try {

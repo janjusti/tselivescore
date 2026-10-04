@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+import zlib
 from dataclasses import dataclass, field
 
 from extras.eleicao import EleicaoStats, candidatos_track_payload, fetch_eleicao_stats
@@ -9,6 +10,44 @@ from extras.tse_client import resolve_panel
 
 MIN_WAIT_SECONDS = 5
 SESSION_TTL_SECONDS = int(os.environ.get("TSELIVESCORE_SESSION_TTL", "30"))
+
+
+def _entry_fingerprint(entry: dict | None) -> int:
+    if not entry:
+        return 0
+    parts = [
+        str(entry.get("perc_sec_totalizadas")),
+        str(entry.get("aprox_votos_restantes")),
+        str(entry.get("mat_def")),
+        str(entry.get("mock_tick")),
+        str(entry.get("latest_update_tse")),
+        str(entry.get("error")),
+    ]
+    for cand in entry.get("candidatos") or []:
+        if isinstance(cand, dict):
+            parts.append(
+                f"{cand.get('nome')}:{cand.get('qtd_votos')}:{cand.get('perc_votos')}:"
+                f"{cand.get('sf_e')}:{cand.get('garantido')}:{cand.get('garantido_turno')}:"
+                f"{cand.get('dentro_proj')}:{cand.get('eliminado_mat')}:{cand.get('eliminado_definitivo')}"
+            )
+        else:
+            parts.append(str(cand))
+    for leg in entry.get("legendas_resumo") or []:
+        parts.append(f"{leg.get('sigla')}:{leg.get('cadeiras')}:{leg.get('votos')}")
+    return zlib.crc32("|".join(parts).encode()) & 0xFFFFFFFF
+
+
+def _slice_entry(entry: dict | None, printables: int) -> dict | None:
+    if entry is None:
+        return None
+    sliced = dict(entry)
+    sliced["printables"] = printables
+    candidatos = entry.get("candidatos")
+    if candidatos is not None:
+        sliced["candidatos"] = candidatos[:printables]
+        tail = candidatos[printables:]
+        sliced["candidatos_track"] = candidatos_track_payload(tail) if tail else []
+    return sliced
 
 
 @dataclass
@@ -44,8 +83,12 @@ class ElectionPoller:
         self._thread.start()
 
     def touch_session(
-        self, session_id: str, panels: list[PanelConfig], wait: int
-    ) -> dict:
+        self,
+        session_id: str,
+        panels: list[PanelConfig],
+        wait: int,
+        client_revs: dict[str, int] | None = None,
+    ) -> tuple[dict, dict[str, int]]:
         wait = max(wait, MIN_WAIT_SECONDS)
         with self._state.lock:
             merged_before = self._panel_signature(self._merged_panels_locked())
@@ -61,7 +104,7 @@ class ElectionPoller:
         if merged_after_sig != merged_before:
             self.poll_now()
 
-        return self._snapshot_for(session_panels)
+        return self._snapshot_for(session_panels, client_revs)
 
     def end_session(self, session_id: str):
         with self._state.lock:
@@ -83,7 +126,8 @@ class ElectionPoller:
             self.poll_now(panels)
 
     def get_snapshot_for(self, panels: list[PanelConfig]) -> dict:
-        return self._snapshot_for(panels)
+        panels_out, _ = self._snapshot_for(panels)
+        return panels_out
 
     def active_session_count(self) -> int:
         self._purge_stale_sessions()
@@ -195,25 +239,22 @@ class ElectionPoller:
     def _panel_signature(panels: list[PanelConfig]) -> tuple:
         return tuple((panel.key, panel.printables) for panel in panels)
 
-    def _snapshot_for(self, panels: list[PanelConfig]) -> dict:
+    def _snapshot_for(
+        self, panels: list[PanelConfig], client_revs: dict[str, int] | None = None
+    ) -> tuple[dict, dict[str, int]]:
+        client_revs = client_revs or {}
         with self._state.lock:
             cache = dict(self._state.cache)
-        return {
-            panel.key: self._slice_entry(cache.get(panel.key), panel.printables)
-            for panel in panels
-        }
-
-    @staticmethod
-    def _slice_entry(entry: dict | None, printables: int) -> dict | None:
-        if entry is None:
-            return None
-        sliced = dict(entry)
-        sliced["printables"] = printables
-        candidatos = entry.get("candidatos")
-        if candidatos is not None:
-            sliced["candidatos_track"] = candidatos_track_payload(candidatos)
-            sliced["candidatos"] = candidatos[:printables]
-        return sliced
+        panels_out: dict = {}
+        revs_out: dict[str, int] = {}
+        for panel in panels:
+            entry = cache.get(panel.key)
+            content_rev = (entry or {}).get("_rev", 0)
+            revs_out[panel.key] = content_rev
+            if entry is not None and client_revs.get(panel.key) == content_rev:
+                continue
+            panels_out[panel.key] = _slice_entry(entry, panel.printables)
+        return panels_out, revs_out
 
     def _poll_panel(self, panel: PanelConfig, mock_tick: int = 0):
         panel_key, _, _ = resolve_panel(panel.key)
@@ -221,6 +262,7 @@ class ElectionPoller:
             with self._state.lock:
                 prev_cache = self._state.cache.get(panel_key)
             entry = fetch_mock_panel(panel_key, prev_cache, mock_tick)
+            entry["_rev"] = _entry_fingerprint(entry)
             with self._state.lock:
                 self._state.cache[panel_key] = entry
             return
@@ -239,6 +281,7 @@ class ElectionPoller:
             with self._state.lock:
                 self._state.prev_stats[panel_key] = stats
 
+        entry["_rev"] = _entry_fingerprint(entry)
         with self._state.lock:
             self._state.cache[panel_key] = entry
 

@@ -46,6 +46,7 @@ class SessionRequest(BaseModel):
     session_id: str
     panels: list[PanelRequest] = Field(default_factory=list)
     wait: int = Field(default=DEFAULT_WAIT, ge=MIN_WAIT_SECONDS, le=60)
+    revs: dict[str, int] = Field(default_factory=dict)
 
 
 class SessionEndRequest(BaseModel):
@@ -88,12 +89,15 @@ def panel_defaults(key: str):
 def heartbeat(body: SessionRequest, request: Request):
     enforce_rate_limit(request)
     panels = [PanelConfig(key=p.key, printables=p.printables) for p in body.panels]
-    snapshot = poller.touch_session(body.session_id, panels, body.wait)
+    snapshot, panel_revs = poller.touch_session(
+        body.session_id, panels, body.wait, body.revs
+    )
     return {
         "wait": body.wait,
         "session_ttl_seconds": SESSION_TTL_SECONDS,
         "active_sessions": poller.active_session_count(),
         "panels": snapshot,
+        "panel_revs": panel_revs,
     }
 
 
