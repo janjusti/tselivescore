@@ -187,7 +187,7 @@ button:hover {
 
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 1rem;
   padding: 1rem;
 }
@@ -387,7 +387,7 @@ button:hover {
 }
 
 .candidates col.col-name {
-  width: 46%;
+  width: auto;
 }
 
 .candidates col.col-num {
@@ -410,17 +410,9 @@ button:hover {
   width: 4.5rem;
 }
 
-.candidates.no-dist col.col-name {
-  width: 40%;
-}
-
 .candidates.no-dist col.col-dist {
   width: 0;
   visibility: collapse;
-}
-
-.candidates.no-dist.no-delta col.col-name {
-  width: 44%;
 }
 
 .candidates.no-dist.no-delta col.col-num {
@@ -501,19 +493,24 @@ button:hover {
 }
 
 .candidates.no-dist .dist-header,
-.candidates.no-dist .dist-cell {
+.candidates.no-dist .dist-cell,
+.candidates.compact-dist col.col-dist,
+.candidates.compact-dist .dist-header,
+.candidates.compact-dist .dist-cell {
   visibility: collapse;
   width: 0;
   padding: 0;
   border: 0;
 }
 
-.candidates.no-delta col.col-delta {
+.candidates.no-delta col.col-delta,
+.candidates.compact-delta col.col-delta {
   width: 0;
   visibility: collapse;
 }
 
-.candidates.no-delta .col-delta {
+.candidates.no-delta .col-delta,
+.candidates.compact-delta .col-delta {
   visibility: collapse;
   width: 0;
   padding: 0;
@@ -521,7 +518,10 @@ button:hover {
 }
 
 .candidates.no-margem .margem-header,
-.candidates.no-margem .margem-cell {
+.candidates.no-margem .margem-cell,
+.candidates.compact-margem col.col-margem,
+.candidates.compact-margem .margem-header,
+.candidates.compact-margem .margem-cell {
   display: none;
 }
 

@@ -24,6 +24,7 @@ let meta = {
 let panels = [];
 let heartbeatTimer = null;
 let freshnessTimer = null;
+let columnFitObserver = null;
 let sessionId = null;
 const prevDeltas = new Map();
 
@@ -168,11 +169,58 @@ function buildPanelKey() {
   return `${uf}:${category.cargo}`;
 }
 
+function namesOverflow(panelEl) {
+  const names = panelEl.querySelectorAll(".cand-name > span:first-child");
+  for (const el of names) {
+    if (el.scrollWidth > el.clientWidth + 1) return true;
+  }
+  return false;
+}
+
+function fitCandidateColumns(panelEl) {
+  const table = panelEl?.querySelector(".candidates");
+  if (!table || !table.querySelector("tbody tr")) return;
+
+  table.classList.remove("compact-delta", "compact-dist", "compact-margem");
+
+  const steps = [];
+  if (!table.classList.contains("no-delta")) steps.push("compact-delta");
+  if (!table.classList.contains("no-dist")) steps.push("compact-dist");
+  if (!table.classList.contains("no-margem")) steps.push("compact-margem");
+
+  for (const cls of steps) {
+    if (!namesOverflow(panelEl)) break;
+    table.classList.add(cls);
+  }
+}
+
+function fitAllCandidateColumns() {
+  for (const panel of panels) {
+    const panelEl = dashboardEl.querySelector(`[data-id="${panel.id}"]`);
+    if (panelEl) fitCandidateColumns(panelEl);
+  }
+}
+
+function scheduleFitCandidateColumns(panelEl) {
+  requestAnimationFrame(() => {
+    if (panelEl) fitCandidateColumns(panelEl);
+    else fitAllCandidateColumns();
+  });
+}
+
+function observeColumnFitting() {
+  if (columnFitObserver) columnFitObserver.disconnect();
+  if (!dashboardEl) return;
+  columnFitObserver = new ResizeObserver(() => scheduleFitCandidateColumns());
+  columnFitObserver.observe(dashboardEl);
+}
+
 function renderPanels() {
   dashboardEl.innerHTML = "";
   if (!panels.length) {
     dashboardEl.innerHTML =
       '<div class="empty-state">Nenhum painel. Clique em "+ Painel" para começar.</div>';
+    observeColumnFitting();
     return;
   }
 
@@ -194,6 +242,7 @@ function renderPanels() {
     });
     dashboardEl.appendChild(node);
   }
+  observeColumnFitting();
 }
 
 function formatNumber(value) {
@@ -686,6 +735,7 @@ function renderPanelData(panelEl, data) {
     `;
     tbody.appendChild(tr);
   });
+  scheduleFitCandidateColumns(panelEl);
 }
 
 function renderDashboardData(data) {
@@ -781,6 +831,7 @@ async function init() {
   await sendHeartbeat();
   scheduleHeartbeat();
   scheduleFreshnessRefresh();
+  observeColumnFitting();
 }
 
 document.getElementById("add-panel-btn").addEventListener("click", () => {
