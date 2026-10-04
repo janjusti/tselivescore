@@ -10,6 +10,8 @@
   --ok: #3fb950;
   --warn: #d29922;
   --font: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  --panel-col-min: 18.5rem;
+  --panel-col-max: 22rem;
 }
 
 * {
@@ -218,18 +220,24 @@ button:hover {
 }
 
 .dashboard {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
   gap: 1rem;
   padding: 1rem;
 }
 
 .panel {
   position: relative;
+  flex: 0 1 var(--panel-col-max);
+  width: min(100%, var(--panel-col-max));
+  min-width: min(100%, var(--panel-col-min));
+  max-width: var(--panel-col-max);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.75rem;
+  padding: 0.6rem 0.65rem;
   min-width: 0;
   --freshness: 0;
   transition: box-shadow 0.9s ease;
@@ -271,9 +279,23 @@ button:hover {
   margin-bottom: 0.5rem;
 }
 
+.panel-heading {
+  flex: 1;
+  min-width: 0;
+}
+
 .panel-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.panel-counts {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  margin-top: 0.12rem;
+  white-space: nowrap;
 }
 
 .panel-controls {
@@ -386,9 +408,7 @@ button:hover {
 }
 
 .panel-stat-line {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .panel-stats:empty {
@@ -418,28 +438,64 @@ button:hover {
   border-collapse: collapse;
 }
 
+.candidates.layout-prop col.col-name {
+  width: 50%;
+}
+
+.candidates.layout-prop col.col-num {
+  width: 20%;
+}
+
+.candidates.layout-prop col.col-pct {
+  width: 14%;
+}
+
+.candidates.layout-prop col.col-margem {
+  width: 16%;
+}
+
+.candidates.layout-maj col.col-name {
+  width: 38%;
+}
+
+.candidates.layout-maj col.col-num {
+  width: 16%;
+}
+
+.candidates.layout-maj col.col-pct {
+  width: 14%;
+}
+
+.candidates.layout-maj col.col-delta {
+  width: 14%;
+}
+
+.candidates.layout-maj col.col-dist {
+  width: 18%;
+}
+
 .candidates col.col-name {
   width: auto;
 }
 
 .candidates col.col-num {
-  width: 4.25rem;
+  width: 5rem;
 }
 
 .candidates col.col-pct {
-  width: 4rem;
+  width: 3.75rem;
 }
 
 .candidates col.col-delta {
-  width: 4.5rem;
+  width: 4.75rem;
 }
 
 .candidates col.col-dist {
-  width: 4.5rem;
+  width: 5rem;
 }
 
 .candidates col.col-margem {
-  width: 4.5rem;
+  width: 5.25rem;
 }
 
 .candidates.no-dist col.col-dist {
@@ -465,7 +521,7 @@ button:hover {
 
 .candidates th,
 .candidates td {
-  padding: 0.25rem 0.35rem;
+  padding: 0.2rem 0.25rem;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
@@ -473,6 +529,8 @@ button:hover {
 .candidates th {
   color: var(--muted);
   font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: -0.01em;
 }
 
 .candidates .col-name {
@@ -481,9 +539,7 @@ button:hover {
 
 .candidates .col-name .cand-name > span:first-child {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
 }
 
 .candidates .col-num,
@@ -491,10 +547,33 @@ button:hover {
 .candidates .col-delta,
 .candidates .col-dist,
 .candidates .col-margem {
+  width: 1%;
   white-space: nowrap;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  padding-left: 0.5rem;
+  padding-left: 0.25rem;
+  font-size: 0.92em;
+}
+
+.candidates.layout-maj .col-pct {
+  min-width: 3.4rem;
+  padding-right: 0.2rem;
+}
+
+.candidates.layout-maj .col-delta {
+  min-width: 3.6rem;
+  padding-left: 0.15rem;
+  padding-right: 0.1rem;
+}
+
+.candidates .col-delta .delta-none {
+  color: var(--muted);
+  opacity: 0.4;
+}
+
+.candidates .col-delta .delta-flat {
+  color: var(--muted);
+  opacity: 0.7;
 }
 
 .candidates tr.eliminated .dist-value,
@@ -742,7 +821,7 @@ tr.turno-mat {
 }
 
 .empty-state {
-  grid-column: 1 / -1;
+  flex: 1 1 100%;
   text-align: center;
   color: var(--muted);
   padding: 3rem 1rem;
@@ -861,8 +940,12 @@ body.tv-mode .toolbar-metrics {
   font-size: 0.95rem;
 }
 
+body.tv-mode {
+  --panel-col-min: 24rem;
+  --panel-col-max: 28rem;
+}
+
 body.tv-mode .dashboard {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
   gap: 1.25rem;
   padding: 1.25rem;
 }
@@ -908,8 +991,10 @@ body.tv-mode .notifications {
 }
 
 @media (max-width: 640px) {
-  .dashboard {
-    grid-template-columns: 1fr;
+  .panel {
+    flex-basis: 100%;
+    width: 100%;
+    max-width: none;
   }
 
   .toolbar {

@@ -123,7 +123,14 @@ class TestDistribuicaoTse(unittest.TestCase):
             _cand("PT2", 80_000, "FED", "PT"),
             _cand("PC1", 100_000, "FED", "PCdoB"),
         ]
-        resumo = apply_proporcional(candidatos, agr, vagas=3, vv=600_000, aprox_votos_restantes=0)
+        resumo = apply_proporcional(
+            candidatos,
+            agr,
+            vagas=3,
+            vv=600_000,
+            aprox_votos_restantes=0,
+            perc_apurado=100,
+        )
         self.assertEqual(sum(item["cadeiras"] for item in resumo), 3)
         self.assertTrue(any(c["dentro_proj"] for c in candidatos))
 
@@ -140,6 +147,34 @@ class TestDistribuicaoTse(unittest.TestCase):
         self.assertEqual(sum(seats.values()), 2)
 
 
+class TestApuracaoNaoIniciada(unittest.TestCase):
+    def test_zero_porcento_nao_marca_eliminado(self):
+        agr = [
+            {
+                "nm": "PL",
+                "tp": "p",
+                "par": [{"sg": "PL", "tvan": "0", "cand": []}],
+            },
+            {
+                "nm": "PT",
+                "tp": "p",
+                "par": [{"sg": "PT", "tvan": "0", "cand": []}],
+            },
+        ]
+        candidatos = [
+            _cand("A", 0, "PL", "PL"),
+            _cand("B", 0, "PT", "PT"),
+        ]
+        resumo = apply_proporcional(
+            candidatos, agr, vagas=8, vv=0, aprox_votos_restantes=0, perc_apurado=0
+        )
+        self.assertEqual(resumo, [])
+        for cand in candidatos:
+            self.assertFalse(cand.get("eliminado_definitivo"))
+            self.assertFalse(cand.get("eliminado_mat"))
+            self.assertIsNone(cand.get("dentro_proj"))
+
+
 class TestGarantiaMatematica(unittest.TestCase):
     def test_colegas_que_podem_passar_greedy(self):
         abaixo = [_cand("B", 4_000_000), _cand("C", 3_500_000)]
@@ -153,6 +188,17 @@ class TestGarantiaMatematica(unittest.TestCase):
         self.assertFalse(
             _candidato_garantido(1, 2, 6_500_000, abaixo, 4_040_000),
         )
+
+    def test_margem_dentro_sem_colega_fora_usa_proximo_dentro(self):
+        reset_mock_state()
+        prev = None
+        for tick in range(1, 14):
+            prev = fetch_mock_panel("rn:6", prev, tick)
+        psd1 = next(c for c in prev["candidatos"] if c["nome"] == "Dep. PSD 1")
+        psd2 = next(c for c in prev["candidatos"] if c["nome"] == "Dep. PSD 2")
+        self.assertTrue(psd1["margem_folga"])
+        self.assertLess(psd1["margem_corte"], psd1["qtd_votos"])
+        self.assertEqual(psd1["margem_corte"], psd1["qtd_votos"] - psd2["qtd_votos"])
 
     def test_mock_pl1_nao_garantido_em_81_porcento(self):
         reset_mock_state()

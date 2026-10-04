@@ -391,6 +391,25 @@ def _candidato_garantido(
     return _colegas_que_podem_passar(votos_cand, abaixo, rest_leg) < limite_passagens
 
 
+def _clear_proporcional_state(candidatos) -> None:
+    for cand in candidatos:
+        for name, value in (
+            ("dentro_proj", None),
+            ("garantido", False),
+            ("eliminado_mat", False),
+            ("eliminado_definitivo", False),
+            ("posicao_legenda", None),
+            ("posicao_partido", None),
+            ("cadeiras_proj", None),
+            ("cadeiras_min", None),
+            ("margem_corte", None),
+            ("margem_folga", None),
+            ("restantes_legenda", None),
+            ("em_perigo", False),
+        ):
+            _set_cand_field(cand, name, value)
+
+
 def apply_garantia_matematica(
     por_legenda: dict[str, list],
     legendas_por_id: dict,
@@ -400,6 +419,7 @@ def apply_garantia_matematica(
     aprox_votos_restantes: int,
     vv: int,
 ) -> None:
+    apuracao_encerrada = vv > 0 and aprox_votos_restantes <= 0
     min_seats = min_cadeiras_por_legenda(
         legendas, por_legenda, vagas, vv, aprox_votos_restantes, seats
     )
@@ -429,7 +449,7 @@ def apply_garantia_matematica(
             _set_cand_field(cand, "garantido", garantido)
 
         if not dentro:
-            if rest_leg <= 0:
+            if apuracao_encerrada:
                 for cand in ordenado:
                     _set_cand_field(cand, "eliminado_definitivo", True)
             continue
@@ -439,9 +459,9 @@ def apply_garantia_matematica(
             if id(cand) in dentro_ids:
                 continue
             gap = ultimo_dentro_votos - _cand_votos(cand)
-            if rest_leg <= 0:
+            if apuracao_encerrada:
                 _set_cand_field(cand, "eliminado_definitivo", gap > 0)
-            else:
+            elif rest_leg > 0:
                 _set_cand_field(cand, "eliminado_mat", gap > rest_leg)
 
 
@@ -453,6 +473,13 @@ def apply_proporcional(
     aprox_votos_restantes: int = 0,
     perc_apurado: float = 0,
 ) -> list[dict]:
+    if not vagas or not candidatos:
+        return []
+
+    if not perc_apurado or not vv:
+        _clear_proporcional_state(candidatos)
+        return []
+
     legendas = build_legendas(agr_list)
     legendas_por_id = {legenda["id"]: legenda for legenda in legendas}
 
@@ -545,7 +572,16 @@ def apply_margem_corte(
                 _set_cand_field(cand, "margem_folga", None)
                 continue
             if id(cand) in dentro_ids:
-                margem = v_p - v_fora if primeiro_fora else v_p
+                if primeiro_fora:
+                    margem = v_p - v_fora
+                elif len(dentro) > 1:
+                    pos = next(i for i, c in enumerate(dentro) if id(c) == id(cand))
+                    if pos + 1 < len(dentro):
+                        margem = v_p - _cand_votos(dentro[pos + 1])
+                    else:
+                        margem = 0
+                else:
+                    margem = 0
                 _set_cand_field(cand, "margem_corte", max(0, margem))
                 _set_cand_field(cand, "margem_folga", True)
             else:

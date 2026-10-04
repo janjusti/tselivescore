@@ -32,6 +32,9 @@ let freshnessTimer = null;
 let columnFitObserver = null;
 let sessionId = null;
 const prevDeltas = new Map();
+const panelTickHistory = new Map();
+const prevMockTick = new Map();
+const prevApuracaoPct = new Map();
 const prevPanelTseUpdate = new Map();
 const prevCandSnapshots = new Map();
 const prevLegendaSeats = new Map();
@@ -43,6 +46,8 @@ const UPDATE_FRESHNESS_WINDOW_S = 30;
 const UPDATE_LIVE_THRESHOLD_S = 15;
 const NOTIFICATION_TTL_MS = 12000;
 const NOTIFICATION_MAX = 8;
+const DELTA_ROLLING_MAX_TICKS = 12;
+const DELTA_ROLLING_MIN_TICKS = 2;
 
 const EVENT_META = {
   eleito_mat: { label: "Eleito (mat.)", tone: "ok" },
@@ -153,6 +158,7 @@ function playEventBeep() {
 
 function syncPanelTracking() {
   const active = new Set(panels.map((panel) => panel.key));
+  const activeIds = new Set(panels.map((panel) => panel.id));
   for (const key of prevPanelTseUpdate.keys()) {
     if (!active.has(key)) prevPanelTseUpdate.delete(key);
   }
@@ -161,8 +167,101 @@ function syncPanelTracking() {
       prevCandSnapshots.delete(key);
       prevLegendaSeats.delete(key);
       prevPanelMatDef.delete(key);
+      panelTickHistory.delete(key);
+      prevMockTick.delete(key);
+      prevApuracaoPct.delete(key);
     }
   }
+  for (const key of prevDeltas.keys()) {
+    const panelId = key.split(":")[0];
+    if (!activeIds.has(panelId)) prevDeltas.delete(key);
+  }
+}
+
+function resetRollingPercHistory(panelKey) {
+  if (!panelKey) return;
+  panelTickHistory.delete(panelKey);
+  const panel = panels.find((p) => p.key === panelKey);
+  if (!panel) return;
+  const prefix = `${panel.id}:`;
+  for (const key of prevDeltas.keys()) {
+    if (key.startsWith(prefix)) prevDeltas.delete(key);
+  }
+}
+
+function shouldResetRollingPerc(panelKey, panelData) {
+  if (!panelData?.apuracao_iniciada) return true;
+  const pct = Number(panelData.perc_sec_totalizadas) || 0;
+  const prevPct = prevApuracaoPct.get(panelKey);
+  if (prevPct != null && pct + 0.5 < prevPct) return true;
+  if (panelData.mock && panelData.mock_tick != null) {
+    const prevTick = prevMockTick.get(panelKey);
+    if (prevTick != null && panelData.mock_tick < prevTick) return true;
+  }
+  return false;
+}
+
+function tickCandidates(panelData) {
+  return panelData.candidatos || [];
+}
+
+function panelDataFingerprint(panelData) {
+  const apuracao = Number(panelData.perc_sec_totalizadas) || 0;
+  const parts = tickCandidates(panelData)
+    .map((cand) => `${cand.nome}:${Number(cand.perc_votos).toFixed(2)}`)
+    .sort();
+  return `${apuracao.toFixed(2)}|${parts.join("|")}`;
+}
+
+function recordPanelTickIfChanged(panelKey, panelData) {
+  if (!panelKey || !panelData) return;
+  const fp = panelDataFingerprint(panelData);
+  let state = panelTickHistory.get(panelKey);
+  if (!state) {
+    state = { lastFp: null, ticks: [] };
+    panelTickHistory.set(panelKey, state);
+  }
+  if (fp === state.lastFp) return;
+
+  const percs = new Map();
+  for (const cand of tickCandidates(panelData)) {
+    const nome = cand.nome;
+    if (!nome) continue;
+    const perc = Number(cand.perc_votos);
+    if (!Number.isFinite(perc)) continue;
+    percs.set(nome, perc);
+  }
+
+  state.ticks.push({ percs });
+  while (state.ticks.length > DELTA_ROLLING_MAX_TICKS) {
+    state.ticks.shift();
+  }
+  state.lastFp = fp;
+}
+
+function computeRollingDeltaPerc(panelKey, nome, currentPerc) {
+  const ticks = panelTickHistory.get(panelKey)?.ticks;
+  if (!ticks || ticks.length < DELTA_ROLLING_MIN_TICKS) return null;
+
+  const baseline = ticks[0].percs.get(nome);
+  if (baseline == null || !Number.isFinite(baseline)) return null;
+
+  const delta = Math.round((currentPerc - baseline) * 100) / 100;
+  return { delta, tickCount: ticks.length };
+}
+
+function formatDeltaCell(rollingDelta) {
+  if (!rollingDelta || rollingDelta.tickCount < DELTA_ROLLING_MIN_TICKS) {
+    return '<span class="delta-none">—</span>';
+  }
+  const title = `Δ acumulado em ${rollingDelta.tickCount} leituras com mudança (janela ${DELTA_ROLLING_MAX_TICKS})`;
+  const delta = rollingDelta.delta;
+  if (delta === 0) {
+    return `<span class="delta-value delta-flat" title="${title}">0.00%</span>`;
+  }
+  const cls = delta > 0 ? "delta-pos" : "delta-neg";
+  const sign = delta > 0 ? "+" : "";
+  return `<span class="delta-value ${cls}" title="${title}">${sign}${delta.toFixed(2)}%</span>`;
 }
 
 function isSnapshotElected(snap, isProporcional, segundoTurno) {
@@ -567,6 +666,8 @@ function fitCandidateColumns(panelEl) {
 
   table.classList.remove("compact-delta", "compact-dist", "compact-margem");
 
+  if (window.matchMedia("(min-width: 641px)").matches) return;
+
   const steps = [];
   if (!table.classList.contains("no-delta")) steps.push("compact-delta");
   if (!table.classList.contains("no-dist")) steps.push("compact-dist");
@@ -590,6 +691,50 @@ function scheduleFitCandidateColumns(panelEl) {
     if (panelEl) fitCandidateColumns(panelEl);
     else fitAllCandidateColumns();
   });
+}
+
+function syncCandidatesTableLayout(table, isMajoritario, isProporcional) {
+  if (!table) return;
+  const mode = isProporcional ? "prop" : "maj";
+  if (table.dataset.cols === mode) return;
+  table.dataset.cols = mode;
+
+  const colgroup = table.querySelector("colgroup");
+  const theadRow = table.querySelector("thead tr");
+  if (!colgroup || !theadRow) return;
+
+  if (isProporcional) {
+    colgroup.innerHTML = `
+      <col class="col-name" />
+      <col class="col-num" />
+      <col class="col-pct" />
+      <col class="col-margem" />
+    `;
+    theadRow.innerHTML = `
+      <th class="col-name">Candidato</th>
+      <th class="col-num">Votos</th>
+      <th class="col-pct">%</th>
+      <th class="col-margem margem-header">Marg.</th>
+    `;
+  } else {
+    colgroup.innerHTML = `
+      <col class="col-name" />
+      <col class="col-num" />
+      <col class="col-pct" />
+      <col class="col-delta" />
+      <col class="col-dist" />
+    `;
+    theadRow.innerHTML = `
+      <th class="col-name">Candidato</th>
+      <th class="col-num">Votos</th>
+      <th class="col-pct">%</th>
+      <th class="col-delta">Δ%</th>
+      <th class="col-dist dist-header">Dist.</th>
+    `;
+  }
+
+  table.classList.toggle("layout-prop", isProporcional);
+  table.classList.toggle("layout-maj", isMajoritario);
 }
 
 function observeColumnFitting() {
@@ -703,7 +848,7 @@ function isCandEleitoProporcional(cand) {
 }
 
 function candEliminacaoProp(cand, pct, isProporcional, usePctFallback = true) {
-  if (!isProporcional || isCandEleitoProporcional(cand)) {
+  if (!isProporcional || pct <= 0 || isCandEleitoProporcional(cand)) {
     return { definitivo: false, foraMargem: false };
   }
   const definitivo =
@@ -829,6 +974,30 @@ function applyUpdateFreshness(updatedEl, delaySeconds) {
   panelEl.style.setProperty("--freshness", freshnessValue);
   panelEl.classList.toggle("panel-fresh", freshness > 0);
   panelEl.classList.toggle("panel-live", isLive);
+}
+
+function formatPanelCounts(data) {
+  const vagas = Number(data?.qtd_vagas);
+  const total = Number(data?.qtd_candidatos);
+  if (!Number.isFinite(vagas) || !Number.isFinite(total) || vagas <= 0 || total <= 0) {
+    return null;
+  }
+  const vagasLabel = vagas === 1 ? "vaga" : "vagas";
+  const candLabel = total === 1 ? "candidato" : "candidatos";
+  return `${vagas} ${vagasLabel} / ${total} ${candLabel}`;
+}
+
+function renderPanelCounts(panelEl, data) {
+  const countsEl = panelEl.querySelector(".panel-counts");
+  if (!countsEl) return;
+  const text = data ? formatPanelCounts(data) : null;
+  if (text) {
+    countsEl.textContent = text;
+    countsEl.hidden = false;
+  } else {
+    countsEl.textContent = "";
+    countsEl.hidden = true;
+  }
 }
 
 function renderPanelUpdated(updatedEl, data) {
@@ -1015,7 +1184,7 @@ function renderToolbarMetrics(panelsData) {
   toolbarMetrics.hidden = false;
 }
 
-function renderPanelData(panelEl, data) {
+function renderPanelData(panelEl, data, panelKey = "") {
   const alertEl = panelEl.querySelector(".panel-alert");
   const tbody = panelEl.querySelector("tbody");
   const apuracaoLabel = panelEl.querySelector(".apuracao-label");
@@ -1036,6 +1205,7 @@ function renderPanelData(panelEl, data) {
     progressFill.style.width = "0%";
     progressBar.setAttribute("aria-valuenow", "0");
     statsEl.textContent = "";
+    renderPanelCounts(panelEl, null);
     renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
     errorEl.textContent = "";
@@ -1047,6 +1217,7 @@ function renderPanelData(panelEl, data) {
     apuracaoLabel.textContent = "";
     progressFill.style.width = "0%";
     statsEl.textContent = "";
+    renderPanelCounts(panelEl, null);
     renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
     errorEl.textContent = data.error;
@@ -1056,11 +1227,13 @@ function renderPanelData(panelEl, data) {
 
   errorEl.textContent = "";
   panelEl.querySelector(".panel-title").textContent = data.title || panelLabel(data.key);
+  renderPanelCounts(panelEl, data);
 
   const isMajoritario = Boolean(data.majoritario);
   const isProporcional = Boolean(data.proporcional);
   const segundoTurno = Boolean(data.segundo_turno);
   const pct = Number(data.perc_sec_totalizadas) || 0;
+  const apuracaoIniciada = Boolean(data.apuracao_iniciada);
   apuracaoLabel.textContent = `${pct}% apurado`;
   progressFill.style.width = `${pct}%`;
   progressBar.setAttribute("aria-valuenow", String(pct));
@@ -1074,9 +1247,7 @@ function renderPanelData(panelEl, data) {
   alertEl.textContent = panelMatAlert(data);
 
   const candidatesTable = panelEl.querySelector(".candidates");
-  candidatesTable?.classList.toggle("no-dist", !isMajoritario);
-  candidatesTable?.classList.toggle("no-margem", !isProporcional);
-  candidatesTable?.classList.toggle("no-delta", isProporcional);
+  syncCandidatesTableLayout(candidatesTable, isMajoritario, isProporcional);
   const restantesFull = formatNumber(data.aprox_votos_restantes);
 
   tbody.innerHTML = "";
@@ -1099,27 +1270,37 @@ function renderPanelData(panelEl, data) {
     const noSegundoTurno = segundoTurno && cand.sf_e === "s";
     const eliminadoMajor =
       isMajoritario && belowCutoff && cand.viavel === false && !noSegundoTurno;
-    const elimProp = candEliminacaoProp(cand, pct, isProporcional);
+    const elimProp = apuracaoIniciada
+      ? candEliminacaoProp(cand, pct, isProporcional)
+      : { definitivo: false, foraMargem: false };
     const eliminadoDefProp = elimProp.definitivo;
     const foraMargemProp = elimProp.foraMargem;
     if (eliminadoMajor || eliminadoDefProp) tr.classList.add("eliminated");
     if (foraMargemProp) tr.classList.add("out-of-margin");
     if (isProporcional && cand.em_perigo) tr.classList.add("at-cutoff");
-    if (!isProporcional) {
+    let rollingDelta = null;
+    if (!isProporcional && apuracaoIniciada) {
+      rollingDelta = computeRollingDeltaPerc(
+        panelKey || data.key,
+        cand.nome,
+        Number(cand.perc_votos)
+      );
       const deltaKey = `${panelId}:${cand.nome}`;
       const prevDelta = prevDeltas.get(deltaKey);
-      if (cand.delta_perc != null && prevDelta !== undefined && cand.delta_perc !== prevDelta) {
-        tr.classList.add(cand.delta_perc > prevDelta ? "flash-pos" : "flash-neg");
+      if (
+        rollingDelta &&
+        rollingDelta.tickCount >= DELTA_ROLLING_MIN_TICKS &&
+        prevDelta !== undefined &&
+        rollingDelta.delta !== prevDelta
+      ) {
+        tr.classList.add(rollingDelta.delta > prevDelta ? "flash-pos" : "flash-neg");
       }
-      if (cand.delta_perc != null) {
-        prevDeltas.set(deltaKey, cand.delta_perc);
+      if (rollingDelta && rollingDelta.tickCount >= DELTA_ROLLING_MIN_TICKS) {
+        prevDeltas.set(deltaKey, rollingDelta.delta);
       }
     }
 
-    const deltaCell =
-      !isProporcional && cand.delta_perc != null
-        ? `<span class="${cand.delta_perc > 0 ? "delta-pos" : "delta-neg"}">${cand.delta_perc > 0 ? "+" : ""}${cand.delta_perc.toFixed(2)}%</span>`
-        : "";
+    const deltaCell = formatDeltaCell(rollingDelta);
 
     const distTitle =
       isMajoritario && cand.distancia_votos != null
@@ -1164,33 +1345,58 @@ function renderPanelData(panelEl, data) {
       margemCell = `<span class="${valueCls}">${formatSignedCompact(margemSigned)}</span>`;
     }
 
-    tr.innerHTML = `
+    const nameCell = `
       <td class="col-name">
         <div class="cand-name">
           <span>${cand.nome}</span>
           ${formatCandSubtitle(cand, pct, isProporcional)}
           ${formatBadges(cand, isProporcional, segundoTurno, pct)}
         </div>
-      </td>
-      <td class="col-num" title="${formatNumber(cand.qtd_votos)}">${formatCompact(cand.qtd_votos)}</td>
-      <td class="col-pct">${formatPerc(cand.perc_votos)}</td>
-      <td class="col-delta">${deltaCell}</td>
-      <td class="col-dist dist-cell" title="${distTitle}">${distCell}</td>
-      <td class="col-margem margem-cell"${margemStyle} title="${margemTitle}">${margemCell}</td>
-    `;
+      </td>`;
+    const numCell = `<td class="col-num" title="${formatNumber(cand.qtd_votos)}">${formatCompact(cand.qtd_votos)}</td>`;
+    const pctCell = `<td class="col-pct">${formatPerc(cand.perc_votos)}</td>`;
+
+    if (isProporcional) {
+      tr.innerHTML = `${nameCell}${numCell}${pctCell}<td class="col-margem margem-cell"${margemStyle} title="${margemTitle}">${margemCell}</td>`;
+    } else {
+      tr.innerHTML = `${nameCell}${numCell}${pctCell}<td class="col-delta">${deltaCell}</td><td class="col-dist dist-cell" title="${distTitle}">${distCell}</td>`;
+    }
     tbody.appendChild(tr);
   });
   scheduleFitCandidateColumns(panelEl);
 }
 
+function updateRollingPercHistory(panelsData) {
+  if (!panelsData) return;
+  for (const panel of panels) {
+    const panelData = panelsData[panel.key];
+    if (!panelData || panelData.error || panelData.proporcional) continue;
+
+    if (shouldResetRollingPerc(panel.key, panelData)) {
+      resetRollingPercHistory(panel.key);
+    }
+
+    const pct = Number(panelData.perc_sec_totalizadas) || 0;
+    prevApuracaoPct.set(panel.key, pct);
+    if (panelData.mock && panelData.mock_tick != null) {
+      prevMockTick.set(panel.key, panelData.mock_tick);
+    }
+
+    if (panelData.apuracao_iniciada) {
+      recordPanelTickIfChanged(panel.key, panelData);
+    }
+  }
+}
+
 function renderDashboardData(data) {
   if (!data) return;
+  updateRollingPercHistory(data.panels);
   detectElectionEvents(data.panels);
   detectPanelUpdates(data.panels);
   for (const panel of panels) {
     const panelEl = dashboardEl.querySelector(`[data-id="${panel.id}"]`);
     if (!panelEl) continue;
-    renderPanelData(panelEl, data.panels?.[panel.key]);
+    renderPanelData(panelEl, data.panels?.[panel.key], panel.key);
   }
   renderToolbarMetrics(data.panels);
 }

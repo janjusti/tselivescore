@@ -97,6 +97,20 @@ def _dep_shares(mock_tick: int) -> dict[str, float]:
     }
 
 
+def _majoritario_shares_at_tick(specs: list[dict], mock_tick: int) -> dict[str, float]:
+    """Simula regiões entrando na apuração: líder ganha % aos poucos."""
+    if mock_tick <= 1:
+        return {spec["nome"]: 0.0 for spec in specs}
+    weights = []
+    n = len(specs)
+    for i, spec in enumerate(specs):
+        rank = (n - i) / n
+        drift = (mock_tick - 2) * 0.0015 * rank
+        weights.append(max(0.01, spec["share"] + drift))
+    total = sum(weights)
+    return {spec["nome"]: w / total for spec, w in zip(specs, weights)}
+
+
 def _majoritario_candidates(cargo: str, uf: str, mock_tick: int) -> list[dict]:
     if cargo == "1":
         return [
@@ -272,9 +286,11 @@ def fetch_mock_panel(
                     )
                 agr_list[-1]["par"][0]["tvan"] = str(party_votes)
         else:
-            for spec in _majoritario_candidates(cargo, uf, mock_tick):
+            maj_specs = _majoritario_candidates(cargo, uf, mock_tick)
+            maj_shares = _majoritario_shares_at_tick(maj_specs, mock_tick)
+            for spec in maj_specs:
                 if perc_apurado > 0:
-                    perc = max(0.1, spec["share"] * 100)
+                    perc = max(0.1, maj_shares[spec["nome"]] * 100)
                     qtd_votos = int(vv * perc / 100)
                     prev_p = prev_perc_map.get(spec["nome"], perc)
                     delta = round(perc - prev_p, 2)
@@ -348,6 +364,7 @@ def fetch_mock_panel(
             "segundo_turno": cargo in CARGOS_SEGUNDO_TURNO,
             "legendas_resumo": legendas_resumo,
             "qtd_vagas": qtd_vagas,
+            "qtd_candidatos": len(candidatos),
             "candidatos": candidatos,
             "updated_at": now.isoformat(),
             "mock": True,

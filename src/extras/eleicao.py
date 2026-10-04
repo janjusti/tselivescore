@@ -15,6 +15,7 @@ from extras.tse_client import (
 
 CANDIDATO_TRACK_FIELDS = (
     "nome",
+    "perc_votos",
     "sf_e",
     "garantido",
     "garantido_turno",
@@ -449,6 +450,7 @@ class EleicaoStats:
             "segundo_turno": self.segundo_turno,
             "legendas_resumo": self.legendas_resumo,
             "qtd_vagas": self.qtd_vagas,
+            "qtd_candidatos": len(self.candidatos),
             "candidatos": [c.to_dict() for c in filtered],
             "updated_at": datetime.now().isoformat(),
         }

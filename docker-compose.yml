@@ -3,6 +3,7 @@ services:
     profiles: [prod]
     build: .
     container_name: tselivescore-prod
+    restart: unless-stopped
     environment: &app-env
       TZ: America/Sao_Paulo
       TSELIVESCORE_WAIT: 5
@@ -13,6 +14,7 @@ services:
   tselivescore:
     build: .
     container_name: tselivescore
+    restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
