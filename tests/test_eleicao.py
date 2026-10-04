@@ -135,9 +135,24 @@ class TestDistanciaSegundoTurno(unittest.TestCase):
         ]
         _calc_distancia(cands, 1, 16_000_000, True, segundo_turno=True, mat_def="")
         self.assertIsNone(cands[0]["distancia_votos"])
-        self.assertIsNone(cands[1]["distancia_votos"])
+        self.assertEqual(cands[1]["distancia_votos"], 11_900_000)
+        self.assertTrue(cands[1]["viavel"])
         self.assertEqual(cands[2]["distancia_votos"], 22_750_000)
         self.assertFalse(cands[2]["viavel"])
+
+    def test_segundo_perde_distancia_so_com_mat_def_s(self):
+        from extras.fixtures import _calc_distancia
+
+        cands = [
+            _cand("A", 35_600_000, 45.45),
+            {**_cand("B", 31_400_000, 39.99), "garantido_turno": True},
+            _cand("C", 7_140_000, 9.10),
+        ]
+        _calc_distancia(cands, 1, 21_600_000, True, segundo_turno=True, mat_def="")
+        self.assertEqual(cands[1]["distancia_votos"], 4_200_000)
+
+        _calc_distancia(cands, 1, 21_600_000, True, segundo_turno=True, mat_def="S")
+        self.assertIsNone(cands[1]["distancia_votos"])
 
 
 if __name__ == "__main__":

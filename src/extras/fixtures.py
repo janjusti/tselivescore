@@ -9,7 +9,7 @@ from extras.eleicao import (
     format_duration,
     infer_mat_def,
 )
-from extras.proporcional import apply_proporcional
+from extras.proporcional import apply_proporcional, infer_mat_def_proporcional
 from extras.tse_client import CARGOS_MAJORITARIOS, CARGOS_SEGUNDO_TURNO, panel_title, resolve_panel
 
 MOCK_ENABLED = os.environ.get("TSELIVESCORE_MOCK", "").lower() in ("1", "true", "yes")
@@ -31,7 +31,7 @@ _VV_BASE = 100_000_000
 # 30 — mat. definido: eleitos (senador, 2 vagas)
 # 32 — fora da margem (mat.) proporcional (PL 4)
 # 33 — eliminado (mat.) majoritário
-# 37 — 100% apurado; congela até reset
+# 37 — mat. definido: eleitos (deputados, 8 vagas); 100% apurado; congela até reset
 
 
 def reset_mock_state() -> None:
@@ -210,7 +210,7 @@ def _calc_distancia(
         leader, second = candidatos[0], candidatos[1]
         leader["distancia_votos"] = None
         leader["viavel"] = None
-        if mat == "S" or second.get("garantido_turno"):
+        if mat == "S":
             second["distancia_votos"] = None
             second["viavel"] = None
         else:
@@ -356,23 +356,28 @@ def fetch_mock_panel(
             )
 
         mat_def, mat_def_label = "", None
-        if majoritario and perc_apurado > 0:
-            mat_def, mat_def_label = infer_mat_def(
-                candidatos, aprox_votos_restantes, cargo, qtd_vagas
-            )
-            apply_mat_def(candidatos, mat_def, cargo, qtd_vagas)
-            if cargo in CARGOS_SEGUNDO_TURNO:
-                apply_garantido_segundo_turno(
-                    candidatos, aprox_votos_restantes, mat_def or ""
+        if perc_apurado > 0:
+            if proporcional:
+                mat_def, mat_def_label = infer_mat_def_proporcional(
+                    candidatos, qtd_vagas
                 )
-            _calc_distancia(
-                candidatos,
-                qtd_vagas,
-                aprox_votos_restantes,
-                majoritario,
-                cargo in CARGOS_SEGUNDO_TURNO,
-                mat_def or "",
-            )
+            elif majoritario:
+                mat_def, mat_def_label = infer_mat_def(
+                    candidatos, aprox_votos_restantes, cargo, qtd_vagas
+                )
+                apply_mat_def(candidatos, mat_def, cargo, qtd_vagas)
+                if cargo in CARGOS_SEGUNDO_TURNO:
+                    apply_garantido_segundo_turno(
+                        candidatos, aprox_votos_restantes, mat_def or ""
+                    )
+                _calc_distancia(
+                    candidatos,
+                    qtd_vagas,
+                    aprox_votos_restantes,
+                    majoritario,
+                    cargo in CARGOS_SEGUNDO_TURNO,
+                    mat_def or "",
+                )
 
         now = datetime.now()
         tse_update = now - timedelta(seconds=2 + (mock_tick % 6))

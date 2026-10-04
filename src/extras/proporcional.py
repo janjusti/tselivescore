@@ -659,3 +659,16 @@ def _set_cand_field(cand, name: str, value):
         setattr(cand, name, value)
     elif isinstance(cand, dict):
         cand[name] = value
+
+
+def infer_mat_def_proporcional(candidatos, qtd_vagas: int) -> tuple[str, str | None]:
+    """Todas as vagas ocupadas por candidatos com eleição matematicamente garantida."""
+    if not candidatos or qtd_vagas <= 0:
+        return "", None
+    dentro = [cand for cand in candidatos if _cand_field(cand, "dentro_proj")]
+    if len(dentro) != qtd_vagas:
+        return "", None
+    if not all(_cand_field(cand, "garantido") for cand in dentro):
+        return "", None
+    label = "Eleitos" if qtd_vagas > 1 else "Eleito"
+    return "E", label

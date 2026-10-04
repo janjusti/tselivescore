@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from extras import torequests
-from extras.proporcional import apply_proporcional
+from extras.proporcional import apply_proporcional, infer_mat_def_proporcional
 from extras.tse_client import (
     CARGOS_MAJORITARIOS,
     CARGOS_PROPORCIONAIS,
@@ -404,7 +404,7 @@ class EleicaoStats:
         leader.distancia_votos = None
         leader.viavel = None
 
-        if mat_def == "S" or second.garantido_turno:
+        if mat_def == "S":
             second.distancia_votos = None
             second.viavel = None
         else:
@@ -421,6 +421,12 @@ class EleicaoStats:
                 cand.viavel = None
 
     def _infer_mat_def(self):
+        if self.proporcional:
+            if self.mat_def in ("", "N", "n", None):
+                self.mat_def, _ = infer_mat_def_proporcional(
+                    self.candidatos, int(self.qtd_vagas or 0)
+                )
+            return
         if not self.majoritario:
             return
         if not self.segundo_turno and self.mat_def in ("S", "s"):

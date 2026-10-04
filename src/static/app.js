@@ -1192,6 +1192,12 @@ function applyUpdateFreshness(updatedEl, delaySeconds) {
 
   const panelEl = panelFromUpdatedEl(updatedEl);
   if (!panelEl) return;
+  if (panelEl.classList.contains("panel-settled")) {
+    panelEl.classList.remove("panel-fresh", "panel-live");
+    panelEl.style.removeProperty("--freshness");
+    updatedEl.classList.remove("updated-live");
+    return;
+  }
   panelEl.style.setProperty("--freshness", freshnessValue);
   panelEl.classList.toggle("panel-fresh", freshness > 0);
   panelEl.classList.toggle("panel-live", isLive);
@@ -1296,11 +1302,21 @@ function renderLegendasViz(container, legendas) {
   }
 }
 
-function panelMatAlert(data) {
-  if (data.mat_def_label) {
-    return `Matematicamente definido: ${data.mat_def_label}`;
+function isPanelMatDefined(data) {
+  const mat = (data?.mat_def || "").toUpperCase();
+  return mat === "E" || mat === "S";
+}
+
+function syncPanelSettledState(panelEl, data) {
+  if (!panelEl) return;
+  const settled = Boolean(data && !data.error && isPanelMatDefined(data));
+  panelEl.classList.toggle("panel-settled", settled);
+  const chipEl = panelEl.querySelector(".panel-settled-chip");
+  if (chipEl) {
+    const label = settled && data.mat_def_label ? data.mat_def_label : "";
+    chipEl.textContent = label ? `Definido · ${label}` : "";
+    chipEl.hidden = !label;
   }
-  return "";
 }
 
 function formatBadges(cand, isProporcional = false, segundoTurno = false, pct = 0) {
@@ -1524,6 +1540,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
     renderLegendasViz(panelEl.querySelector(".panel-legendas-viz"), null);
     renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
+    syncPanelSettledState(panelEl, null);
     errorEl.textContent = "";
     tbody.innerHTML = "";
     return;
@@ -1537,12 +1554,14 @@ function renderPanelData(panelEl, data, panelKey = "") {
     renderLegendasViz(panelEl.querySelector(".panel-legendas-viz"), null);
     renderPanelUpdated(updatedEl, {});
     alertEl.textContent = "";
+    syncPanelSettledState(panelEl, null);
     errorEl.textContent = data.error;
     tbody.innerHTML = "";
     return;
   }
 
   errorEl.textContent = "";
+  syncPanelSettledState(panelEl, data);
   panelEl.querySelector(".panel-title").textContent = data.title || panelLabel(data.key);
   renderPanelCounts(panelEl, data);
 
@@ -1560,11 +1579,11 @@ function renderPanelData(panelEl, data, panelKey = "") {
   renderPanelStats(statsEl, data, pct, isProporcional);
   renderLegendasViz(panelEl.querySelector(".panel-legendas-viz"), isProporcional ? data.legendas_resumo : null);
 
+  alertEl.textContent = "";
   renderPanelUpdated(updatedEl, data);
 
-  alertEl.textContent = panelMatAlert(data);
-
   const candidatesTable = panelEl.querySelector(".candidates");
+  const panelSettled = isPanelMatDefined(data);
   syncCandidatesTableLayout(candidatesTable, isMajoritario, isProporcional);
   const restantesFull = formatNumber(data.aprox_votos_restantes);
   tbody.innerHTML = "";
@@ -1607,6 +1626,7 @@ function renderPanelData(panelEl, data, panelKey = "") {
       const deltaKey = `${panelId}:${cand.nome}`;
       const prevDelta = prevDeltas.get(deltaKey);
       if (
+        !panelSettled &&
         rollingDelta &&
         rollingDelta.tickCount >= DELTA_ROLLING_MIN_TICKS &&
         prevDelta !== undefined &&

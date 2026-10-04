@@ -7,6 +7,7 @@ from extras.proporcional import (
     _legenda_sigla,
     apply_proporcional,
     calc_quociente_eleitoral,
+    infer_mat_def_proporcional,
     calc_quociente_partidario,
     distribute_cadeiras_tse,
     min_cadeiras_por_legenda,
@@ -218,6 +219,24 @@ class TestGarantiaMatematica(unittest.TestCase):
             prev = fetch_mock_panel("rn:6", prev, tick)
         pl1 = next(c for c in prev["candidatos"] if c["nome"] == "Dep. PL 1")
         self.assertTrue(pl1.get("garantido"))
+
+    def test_mock_deputados_mat_def_so_quando_todas_vagas_garantidas(self):
+        reset_mock_state()
+        prev = None
+        for tick in range(1, 37):
+            prev = fetch_mock_panel("rn:6", prev, tick)
+        self.assertEqual(prev["perc_sec_totalizadas"], 98.0)
+        self.assertEqual(prev.get("mat_def"), "")
+        self.assertFalse(
+            all(c.get("garantido") for c in prev["candidatos"] if c.get("dentro_proj"))
+        )
+
+        prev = fetch_mock_panel("rn:6", prev, 37)
+        self.assertEqual(prev.get("mat_def"), "E")
+        self.assertEqual(prev.get("mat_def_label"), "Eleitos")
+        dentro = [c for c in prev["candidatos"] if c.get("dentro_proj")]
+        self.assertEqual(len(dentro), prev["qtd_vagas"])
+        self.assertTrue(all(c.get("garantido") for c in dentro))
 
 
 if __name__ == "__main__":
