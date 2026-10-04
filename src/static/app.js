@@ -1267,39 +1267,35 @@ function scheduleFreshnessRefresh() {
   freshnessTimer = setInterval(refreshUpdateFreshness, 1000);
 }
 
+const LEGENDAS_VIZ_MAX = 4;
+
 function renderLegendasViz(container, legendas) {
   if (!container) return;
   container.replaceChildren();
-  if (!legendas?.length) {
+  const top = (legendas || [])
+    .filter((leg) => (Number(leg.cadeiras) || 0) > 0)
+    .sort(
+      (a, b) =>
+        (Number(b.cadeiras) || 0) - (Number(a.cadeiras) || 0) ||
+        (Number(b.votos) || 0) - (Number(a.votos) || 0)
+    )
+    .slice(0, LEGENDAS_VIZ_MAX);
+  if (!top.length) {
     container.hidden = true;
+    container.textContent = "";
+    container.removeAttribute("title");
     return;
   }
   container.hidden = false;
-  for (const leg of legendas) {
-    const cadeiras = Number(leg.cadeiras) || 0;
-    const chip = document.createElement("div");
-    chip.className = "legenda-chip";
-    chip.title = `${leg.sigla}: ${formatCompact(leg.votos)} votos · ${cadeiras} cadeira${cadeiras === 1 ? "" : "s"}`;
-
-    const sigla = document.createElement("span");
-    sigla.className = "legenda-sigla";
-    sigla.textContent = leg.sigla;
-
-    const seats = document.createElement("span");
-    seats.className = "legenda-seats";
-    for (let i = 0; i < cadeiras; i++) {
-      const block = document.createElement("span");
-      block.className = "leg-seat";
-      seats.appendChild(block);
-    }
-
-    const count = document.createElement("span");
-    count.className = "legenda-count";
-    count.textContent = String(cadeiras);
-
-    chip.append(sigla, seats, count);
-    container.appendChild(chip);
-  }
+  container.textContent = top
+    .map((leg) => `${leg.sigla} ${Number(leg.cadeiras) || 0}`)
+    .join(" · ");
+  container.title = top
+    .map((leg) => {
+      const cadeiras = Number(leg.cadeiras) || 0;
+      return `${leg.sigla}: ${formatCompact(leg.votos)} votos · ${cadeiras} cadeira${cadeiras === 1 ? "" : "s"}`;
+    })
+    .join(" · ");
 }
 
 function isPanelMatDefined(data) {

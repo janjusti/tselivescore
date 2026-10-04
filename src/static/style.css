@@ -621,47 +621,19 @@ button:hover {
 }
 
 .panel-legendas-viz {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem 0.55rem;
-  margin-bottom: 0.4rem;
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .panel-legendas-viz[hidden] {
   display: none;
-}
-
-.legenda-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.72rem;
-  padding: 0.12rem 0.35rem;
-  border-radius: 4px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-}
-
-.legenda-sigla {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.legenda-seats {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.leg-seat {
-  width: 0.42rem;
-  height: 0.62rem;
-  border-radius: 1px;
-  background: var(--accent);
-}
-
-.legenda-count {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .panel-alert {
