@@ -52,10 +52,6 @@ def cand_is_track_relevant(cand) -> bool:
         return True
     if _cand_get(cand, "garantido_turno"):
         return True
-    if _cand_get(cand, "eliminado_mat"):
-        return True
-    if _cand_get(cand, "eliminado_definitivo"):
-        return True
     sf_e = _cand_get(cand, "sf_e")
     if sf_e not in (None, "", "n"):
         return True

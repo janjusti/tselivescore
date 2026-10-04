@@ -34,6 +34,16 @@ class TestPollerSnapshot(unittest.TestCase):
         self.assertEqual(len(track), 1)
         self.assertEqual(track[0]["nome"], "Cand 150")
 
+    def test_eliminado_so_nao_entra_no_track(self):
+        candidatos = [
+            {"nome": f"Cand {i}", "perc_votos": 0.01, "sf_e": "n"}
+            for i in range(100)
+        ]
+        candidatos[50]["eliminado_mat"] = True
+        candidatos[50]["eliminado_definitivo"] = True
+        track = candidatos_for_track(candidatos, 5)
+        self.assertEqual(track, [])
+
     def test_snapshot_omite_painel_inalterado(self):
         poller = ElectionPoller()
         panel = PanelConfig(key="br:1", printables=4)

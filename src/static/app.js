@@ -64,6 +64,8 @@ const panelMaxPrintables = new Map();
 let eventLogAgeTimer = null;
 const DELTA_ROLLING_MAX_TICKS = 12;
 const DELTA_ROLLING_MIN_TICKS = 2;
+/** Majoritário: notifica eliminação só nas primeiras posições abaixo do corte. */
+const ELIM_NOTIFY_MAJ_MARGIN = 3;
 const DEFAULT_PANEL_KEYS = ["br:1", "rn:3", "rn:5", "rn:6", "rn:7"];
 
 const EVENT_META = {
@@ -326,6 +328,27 @@ function isSnapshotEliminated(snap, isProporcional, isMajoritario) {
   return false;
 }
 
+function candInVisibleList(data, nome) {
+  return (data?.candidatos || []).some((cand) => cand.nome === nome);
+}
+
+function shouldNotifyElimination(cand, prev, snap, idx, data, isProporcional, isMajoritario, segundoTurno, qtdVagas) {
+  if (isProporcional) {
+    return (
+      prev.dentro_proj === true ||
+      prev.em_perigo === true ||
+      snap.dentro_proj === true ||
+      snap.em_perigo === true ||
+      cand.em_perigo === true ||
+      cand.dentro_proj === true
+    );
+  }
+  if (!isMajoritario) return false;
+  if (!candInVisibleList(data, cand.nome)) return false;
+  const cutoff = segundoTurno ? 2 : qtdVagas;
+  return idx >= cutoff && idx < cutoff + ELIM_NOTIFY_MAJ_MARGIN;
+}
+
 function trackingCandidates(data) {
   const visible = data?.candidatos || [];
   const track = data?.candidatos_track;
@@ -418,6 +441,7 @@ function candSnapshot(cand, idx, qtdVagas, isMajoritario, segundoTurno = false) 
     eliminado_definitivo: Boolean(cand.eliminado_definitivo),
     viavel: cand.viavel,
     dentro_proj: cand.dentro_proj,
+    em_perigo: Boolean(cand.em_perigo),
     below_cutoff: isMajoritario && idx >= cutoff,
   };
 }
@@ -653,19 +677,36 @@ function detectElectionEvents(panelsData) {
       const nowElimProp = isProporcional
         ? candEliminacaoProp(cand, pct, true)
         : { definitivo: false, foraMargem: false };
-      if (!prevElimProp.definitivo && nowElimProp.definitivo) {
+      const notifyElim = shouldNotifyElimination(
+        cand,
+        prev,
+        snap,
+        idx,
+        data,
+        isProporcional,
+        isMajoritario,
+        segundoTurno,
+        qtdVagas
+      );
+      if (notifyElim && !prevElimProp.definitivo && nowElimProp.definitivo) {
         events.push({
           type: "eliminado_def_prop",
           panelTitle,
           subject: cand.nome,
         });
-      } else if (!wasElimSnap && nowElimSnap && isProporcional && nowElimProp.foraMargem) {
+      } else if (
+        notifyElim &&
+        !wasElimSnap &&
+        nowElimSnap &&
+        isProporcional &&
+        nowElimProp.foraMargem
+      ) {
         events.push({
           type: "eliminado_mat_prop",
           panelTitle,
           subject: cand.nome,
         });
-      } else if (!wasElimSnap && nowElimSnap && !isProporcional) {
+      } else if (notifyElim && !wasElimSnap && nowElimSnap && !isProporcional) {
         events.push({
           type: "eliminado_mat_maj",
           panelTitle,
