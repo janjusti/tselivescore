@@ -24,6 +24,9 @@ CARGO_LABELS = {
 }
 
 CARGOS_MAJORITARIOS = {CARGO_PRESIDENTE, CARGO_GOVERNADOR, CARGO_SENADOR}
+# Presidente e governador: maioria absoluta; abaixo de 50% vai a 2º turno (Lei 9.504/97).
+# Senador: maioria relativa; os mais votados são eleitos, sem 2º turno (CF art. 46).
+CARGOS_SEGUNDO_TURNO = {CARGO_PRESIDENTE, CARGO_GOVERNADOR}
 CARGOS_PROPORCIONAIS = {CARGO_DEP_FEDERAL, CARGO_DEP_ESTADUAL, CARGO_DEP_DISTRITAL}
 
 UFS = [

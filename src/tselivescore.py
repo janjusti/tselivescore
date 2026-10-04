@@ -22,8 +22,9 @@ def format_cli(stats: EleicaoStats, qtd_printable: int) -> str:
     else:
         s += "Apuração ainda não iniciada.\n"
     if stats.mat_def != "" and stats.mat_def != "N":
-        msg = {"E": "Eleito", "S": "Segundo turno"}
-        s += f"\n[Matematicamente definido: {msg[stats.mat_def]}]\n\n"
+        label = stats._mat_def_label()
+        if label:
+            s += f"\n[Matematicamente definido: {label}]\n\n"
     filtered_cands = (
         stats.candidatos[:qtd_printable]
         if qtd_printable != -1

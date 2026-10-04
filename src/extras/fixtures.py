@@ -2,13 +2,9 @@ import os
 import threading
 from datetime import datetime, timedelta
 
-from extras.eleicao import (
-    apply_mat_def_majoritario,
-    format_duration,
-    infer_mat_def_majoritario,
-)
+from extras.eleicao import apply_mat_def, format_duration, infer_mat_def
 from extras.proporcional import apply_proporcional
-from extras.tse_client import CARGOS_MAJORITARIOS, panel_title, resolve_panel
+from extras.tse_client import CARGOS_MAJORITARIOS, CARGOS_SEGUNDO_TURNO, panel_title, resolve_panel
 
 MOCK_ENABLED = os.environ.get("TSELIVESCORE_MOCK", "").lower() in ("1", "true", "yes")
 
@@ -221,10 +217,10 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
 
         mat_def, mat_def_label = "", None
         if majoritario:
-            mat_def, mat_def_label = infer_mat_def_majoritario(
-                candidatos, aprox_votos_restantes
+            mat_def, mat_def_label = infer_mat_def(
+                candidatos, aprox_votos_restantes, cargo, qtd_vagas
             )
-            apply_mat_def_majoritario(candidatos, mat_def)
+            apply_mat_def(candidatos, mat_def, cargo, qtd_vagas)
 
         now = datetime.now()
         # Simula leitura recente do TSE a cada tick (2–7s), para testar destaque de atualização.
@@ -247,6 +243,7 @@ def fetch_mock_panel(panel_key: str, printables: int, prev_entry: dict | None) -
             "mat_def_label": mat_def_label,
             "majoritario": majoritario,
             "proporcional": proporcional,
+            "segundo_turno": cargo in CARGOS_SEGUNDO_TURNO,
             "legendas_resumo": legendas_resumo,
             "qtd_vagas": qtd_vagas,
             "candidatos": candidatos[:printables],

@@ -546,11 +546,11 @@ function formatLegendasResumo(legendas) {
   return legendas.map((l) => `${l.sigla} ${l.cadeiras}`).join(" · ");
 }
 
-function formatBadges(cand, isProporcional = false) {
+function formatBadges(cand, isProporcional = false, segundoTurno = false) {
   const badges = [];
   if (isProporcional && cand.sf_e === "s") {
     badges.push('<span class="badge badge-elected">Eleito</span>');
-  } else if (cand.sf_e === "s") {
+  } else if (cand.sf_e === "s" && segundoTurno) {
     badges.push('<span class="badge badge-turno">2º turno</span>');
   } else if (cand.garantido) {
     badges.push('<span class="badge badge-elected-mat">Eleito (mat.)</span>');
@@ -707,6 +707,7 @@ function renderPanelData(panelEl, data) {
 
   const isMajoritario = Boolean(data.majoritario);
   const isProporcional = Boolean(data.proporcional);
+  const segundoTurno = Boolean(data.segundo_turno);
   const pct = Number(data.perc_sec_totalizadas) || 0;
   apuracaoLabel.textContent = `${pct}% apurado`;
   progressFill.style.width = `${pct}%`;
@@ -736,8 +737,10 @@ function renderPanelData(panelEl, data) {
     if (isProporcional) {
       if (cand.sf_e === "s" || cand.garantido) tr.classList.add("elected");
     } else {
-      if (cand.sf_e === "s") tr.classList.add("turno");
+      if (cand.sf_e === "s" && segundoTurno) tr.classList.add("turno");
       if (cand.garantido || (cand.sf_e !== "n" && cand.sf_e !== "s")) {
+        tr.classList.add("elected");
+      } else if (cand.sf_e === "s" && !segundoTurno) {
         tr.classList.add("elected");
       }
     }
@@ -801,7 +804,7 @@ function renderPanelData(panelEl, data) {
         <div class="cand-name">
           <span>${cand.nome}</span>
           ${formatCandSubtitle(cand)}
-          ${formatBadges(cand, isProporcional)}
+          ${formatBadges(cand, isProporcional, segundoTurno)}
         </div>
       </td>
       <td class="col-num" title="${formatNumber(cand.qtd_votos)}">${formatCompact(cand.qtd_votos)}</td>

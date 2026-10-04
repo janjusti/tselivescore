@@ -5,6 +5,7 @@ from extras.proporcional import apply_proporcional
 from extras.tse_client import (
     CARGOS_MAJORITARIOS,
     CARGOS_PROPORCIONAIS,
+    CARGOS_SEGUNDO_TURNO,
     build_url,
     normalize_payload,
     parse_response,
@@ -38,7 +39,8 @@ def _cand_perc(cand) -> float:
     return cand.perc_votos if hasattr(cand, "perc_votos") else cand["perc_votos"]
 
 
-def infer_mat_def_majoritario(candidatos, aprox_votos_restantes) -> tuple[str, str | None]:
+def infer_mat_def_segundo_turno(candidatos, aprox_votos_restantes) -> tuple[str, str | None]:
+    """Presidente/governador: maioria absoluta ou 2º turno."""
     if not candidatos or len(candidatos) < 2:
         return "", None
 
@@ -65,25 +67,77 @@ def infer_mat_def_majoritario(candidatos, aprox_votos_restantes) -> tuple[str, s
     return "", None
 
 
-def apply_mat_def_majoritario(candidatos, mat_def: str) -> str:
+def infer_mat_def_plurality(
+    candidatos, aprox_votos_restantes, qtd_vagas: int
+) -> tuple[str, str | None]:
+    """Senador: maioria relativa; os qtd_vagas mais votados, sem 2º turno."""
+    if not candidatos or qtd_vagas <= 0:
+        return "", None
+
+    restantes = max(0, int(aprox_votos_restantes or 0))
+    if len(candidatos) <= qtd_vagas:
+        return "E", "Eleitos" if qtd_vagas > 1 else "Eleito"
+
+    cand_lim = candidatos[qtd_vagas - 1]
+    primeiro_fora = candidatos[qtd_vagas]
+    gap = _cand_votos(cand_lim) - _cand_votos(primeiro_fora)
+    if gap > restantes:
+        return "E", "Eleitos" if qtd_vagas > 1 else "Eleito"
+
+    return "", None
+
+
+def infer_mat_def(
+    candidatos, aprox_votos_restantes, cargo_cd: str, qtd_vagas: int
+) -> tuple[str, str | None]:
+    if cargo_cd in CARGOS_SEGUNDO_TURNO:
+        return infer_mat_def_segundo_turno(candidatos, aprox_votos_restantes)
+    if cargo_cd in CARGOS_MAJORITARIOS:
+        return infer_mat_def_plurality(candidatos, aprox_votos_restantes, qtd_vagas)
+    return "", None
+
+
+# Compat: nome antigo usado em testes/fixtures legados.
+infer_mat_def_majoritario = infer_mat_def_segundo_turno
+
+
+def _set_sf_e(cand, value: str) -> None:
+    sf_e = cand.sf_e if hasattr(cand, "sf_e") else cand["sf_e"]
+    if sf_e in ("n", "", None):
+        if hasattr(cand, "sf_e"):
+            cand.sf_e = value
+        else:
+            cand["sf_e"] = value
+
+
+def apply_mat_def_segundo_turno(candidatos, mat_def: str) -> str:
     if not candidatos or not mat_def:
         return mat_def
     leader = candidatos[0]
     if mat_def == "E":
-        sf_e = leader.sf_e if hasattr(leader, "sf_e") else leader["sf_e"]
-        if sf_e in ("n", "", None):
-            if hasattr(leader, "sf_e"):
-                leader.sf_e = "e"
-            else:
-                leader["sf_e"] = "e"
+        _set_sf_e(leader, "e")
     elif mat_def == "S":
-        sf_e = leader.sf_e if hasattr(leader, "sf_e") else leader["sf_e"]
-        if sf_e in ("n", "", None):
-            if hasattr(leader, "sf_e"):
-                leader.sf_e = "s"
-            else:
-                leader["sf_e"] = "s"
+        _set_sf_e(leader, "s")
     return mat_def
+
+
+def apply_mat_def_plurality(candidatos, mat_def: str, qtd_vagas: int) -> str:
+    if not candidatos or not mat_def or mat_def != "E" or qtd_vagas <= 0:
+        return mat_def
+    for cand in candidatos[:qtd_vagas]:
+        _set_sf_e(cand, "e")
+    return mat_def
+
+
+def apply_mat_def(candidatos, mat_def: str, cargo_cd: str, qtd_vagas: int) -> str:
+    if cargo_cd in CARGOS_SEGUNDO_TURNO:
+        return apply_mat_def_segundo_turno(candidatos, mat_def)
+    if cargo_cd in CARGOS_MAJORITARIOS:
+        return apply_mat_def_plurality(candidatos, mat_def, qtd_vagas)
+    return mat_def
+
+
+apply_mat_def_majoritario = apply_mat_def_segundo_turno
 
 
 class Candidato:
@@ -224,6 +278,7 @@ class EleicaoStats:
         self.qtd_votos_validos = self.get_stat("vv")
         self.majoritario = self.cargo_cd in CARGOS_MAJORITARIOS
         self.proporcional = self.cargo_cd in CARGOS_PROPORCIONAIS
+        self.segundo_turno = self.cargo_cd in CARGOS_SEGUNDO_TURNO
         self.legendas_resumo = []
 
     def _calc_proporcional(self):
@@ -270,14 +325,34 @@ class EleicaoStats:
     def _infer_mat_def(self):
         if not self.majoritario:
             return
+        if not self.segundo_turno and self.mat_def in ("S", "s"):
+            self.mat_def = ""
         if self.mat_def in ("", "N", "n", None):
-            self.mat_def, _ = infer_mat_def_majoritario(
-                self.candidatos, self.aprox_votos_restantes
+            self.mat_def, _ = infer_mat_def(
+                self.candidatos,
+                self.aprox_votos_restantes,
+                self.cargo_cd,
+                int(self.qtd_vagas or 0),
             )
-        apply_mat_def_majoritario(self.candidatos, self.mat_def)
+        apply_mat_def(
+            self.candidatos,
+            self.mat_def,
+            self.cargo_cd,
+            int(self.qtd_vagas or 0),
+        )
+
+    def _mat_def_label(self) -> str | None:
+        if not self.mat_def or self.mat_def in ("N", "n"):
+            return None
+        if self.mat_def == "S":
+            return "Segundo turno"
+        if self.mat_def == "E":
+            if not self.segundo_turno and (self.qtd_vagas or 0) > 1:
+                return "Eleitos"
+            return "Eleito"
+        return None
 
     def to_dict(self) -> dict:
-        mat_labels = {"E": "Eleito", "S": "Segundo turno"}
         tse_delay = None
         tse_delay_human = None
         if self.latest_update_tse is not None:
@@ -303,9 +378,10 @@ class EleicaoStats:
             "tse_delay_human": tse_delay_human,
             "apuracao_iniciada": self.perc_sec_totalizadas != 0,
             "mat_def": self.mat_def,
-            "mat_def_label": mat_labels.get(self.mat_def),
+            "mat_def_label": self._mat_def_label(),
             "majoritario": self.majoritario,
             "proporcional": self.proporcional,
+            "segundo_turno": self.segundo_turno,
             "legendas_resumo": self.legendas_resumo,
             "qtd_vagas": self.qtd_vagas,
             "candidatos": [c.to_dict() for c in filtered],
