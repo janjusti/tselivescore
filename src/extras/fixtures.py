@@ -7,6 +7,7 @@ from extras.eleicao import (
     apply_garantido_segundo_turno,
     apply_mat_def,
     calc_maioria_1t,
+    calc_vagas_preenchidas,
     format_duration,
     infer_mat_def,
 )
@@ -462,6 +463,9 @@ def fetch_mock_panel(
             ),
             "legendas_resumo": legendas_resumo,
             "qtd_vagas": qtd_vagas,
+            "vagas_preenchidas": calc_vagas_preenchidas(
+                candidatos, proporcional=proporcional
+            ),
             "qtd_candidatos": len(candidatos),
             "candidatos": candidatos,
             "updated_at": now.isoformat(),

@@ -306,6 +306,24 @@ def calc_maioria_1t(
     }
 
 
+def calc_vagas_preenchidas(candidatos, *, proporcional: bool) -> dict[str, int]:
+    """Vagas ocupadas: confirmação TSE (oficial) vs garantia matemática."""
+    oficial = mat = 0
+    for cand in candidatos or []:
+        sf_e = _cand_sf_e(cand)
+        if proporcional:
+            if sf_e == "s":
+                oficial += 1
+            if _cand_get(cand, "garantido"):
+                mat += 1
+        else:
+            if sf_e == "e":
+                oficial += 1
+            if _cand_get(cand, "eleito_mat"):
+                mat += 1
+    return {"oficial": oficial, "mat": mat}
+
+
 def apply_garantido_segundo_turno(
     candidatos, aprox_votos_restantes, mat_def: str
 ) -> None:
@@ -424,6 +442,9 @@ class EleicaoStats:
         self._calc_distancia()
         self._calc_maioria_1t()
         self.apuracao_regioes = None
+        self.vagas_preenchidas = calc_vagas_preenchidas(
+            self.candidatos, proporcional=self.proporcional
+        )
 
     def get_stat(self, key: str, custom_base: dict = None):
         base = self._raw_data if custom_base is None else custom_base
@@ -660,6 +681,7 @@ class EleicaoStats:
             "apuracao_regioes": self.apuracao_regioes,
             "legendas_resumo": self.legendas_resumo,
             "qtd_vagas": self.qtd_vagas,
+            "vagas_preenchidas": self.vagas_preenchidas,
             "qtd_candidatos": len(self.candidatos),
             "candidatos": [c.to_dict() for c in filtered],
             "updated_at": datetime.now().isoformat(),

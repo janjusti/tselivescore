@@ -6,6 +6,7 @@ from extras.eleicao import (
     apply_garantido_segundo_turno,
     apply_mat_def,
     calc_maioria_1t,
+    calc_vagas_preenchidas,
     infer_mat_def,
     infer_mat_def_plurality,
     infer_mat_def_segundo_turno,
@@ -199,6 +200,29 @@ class TestDistanciaSegundoTurno(unittest.TestCase):
 
         _calc_distancia(cands, 1, 21_600_000, True, segundo_turno=True, mat_def="S")
         self.assertIsNone(cands[1]["distancia_votos"])
+
+
+class TestVagasPreenchidas(unittest.TestCase):
+    def test_proporcional_conta_conf_e_mat(self):
+        cands = [
+            {**_cand("A", 1, 10), "sf_e": "s", "garantido": True},
+            {**_cand("B", 1, 9), "sf_e": "n", "garantido": True},
+            {**_cand("C", 1, 8), "sf_e": "n", "garantido": False},
+        ]
+        self.assertEqual(
+            calc_vagas_preenchidas(cands, proporcional=True),
+            {"oficial": 1, "mat": 2},
+        )
+
+    def test_majoritario_conta_eleito_tse_e_mat(self):
+        cands = [
+            {**_cand("A", 1, 55), "sf_e": "e", "eleito_mat": True},
+            {**_cand("B", 1, 30), "sf_e": "n", "eleito_mat": False},
+        ]
+        self.assertEqual(
+            calc_vagas_preenchidas(cands, proporcional=False),
+            {"oficial": 1, "mat": 1},
+        )
 
 
 class TestMaioria1t(unittest.TestCase):

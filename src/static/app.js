@@ -1378,26 +1378,48 @@ function applyUpdateFreshness(updatedEl, delaySeconds) {
   panelEl.classList.toggle("panel-live", isLive);
 }
 
-function formatPanelCounts(data) {
+function vagasRestantes(data) {
   const vagas = Number(data?.qtd_vagas);
-  const total = Number(data?.qtd_candidatos);
-  if (!Number.isFinite(vagas) || !Number.isFinite(total) || vagas <= 0 || total <= 0) {
-    return null;
+  if (!Number.isFinite(vagas) || vagas <= 0) return null;
+  const preenchidas = Math.min(
+    vagas,
+    Number(data?.vagas_preenchidas?.mat) || 0
+  );
+  return Math.max(0, vagas - preenchidas);
+}
+
+function formatPanelCounts(data) {
+  if (!data?.proporcional) {
+    return { text: null, title: "" };
+  }
+  const vagas = Number(data?.qtd_vagas);
+  if (!Number.isFinite(vagas) || vagas <= 0) {
+    return { text: null, title: "" };
   }
   const vagasLabel = vagas === 1 ? "vaga" : "vagas";
-  const candLabel = total === 1 ? "candidato" : "candidatos";
-  return `${vagas} ${vagasLabel} / ${total} ${candLabel}`;
+  let text = `${vagas} ${vagasLabel}`;
+  if (data.apuracao_iniciada) {
+    const restantes = vagasRestantes(data);
+    if (restantes != null) {
+      const restLabel = restantes === 1 ? "restante" : "restantes";
+      text += ` (${restantes} ${restLabel})`;
+    }
+  }
+  return { text, title: "" };
 }
 
 function renderPanelCounts(panelEl, data) {
   const countsEl = panelEl.querySelector(".panel-counts");
   if (!countsEl) return;
-  const text = data ? formatPanelCounts(data) : null;
+  const { text, title } = data ? formatPanelCounts(data) : { text: null, title: "" };
   if (text) {
     countsEl.textContent = text;
+    if (title) countsEl.title = title;
+    else countsEl.removeAttribute("title");
     countsEl.hidden = false;
   } else {
     countsEl.textContent = "";
+    countsEl.removeAttribute("title");
     countsEl.hidden = true;
   }
 }
