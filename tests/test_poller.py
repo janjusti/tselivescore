@@ -18,7 +18,7 @@ class TestPollerSnapshot(unittest.TestCase):
             {"nome": "D", "perc_votos": 1.0, "sf_e": "n", "dentro_proj": True},
         ]
         entry = {"candidatos": candidatos, "title": "Teste"}
-        sliced = _slice_entry(entry, 2)
+        sliced = _slice_entry(entry, PanelConfig(key="test", printables=2))
         self.assertEqual(len(sliced["candidatos"]), 2)
         self.assertEqual(len(sliced["candidatos_track"]), 1)
         self.assertEqual(sliced["candidatos_track"][0]["nome"], "D")
@@ -131,6 +131,80 @@ class TestPollerSnapshot(unittest.TestCase):
             ],
         }
         self.assertEqual(entry_fingerprint(base), entry_fingerprint(changed))
+
+    def test_slice_disputa_oculta_garantidos(self):
+        candidatos = [
+            {"nome": "G1", "perc_votos": 10.0, "sf_e": "n", "garantido": True, "dentro_proj": True},
+            {"nome": "G2", "perc_votos": 9.0, "sf_e": "n", "garantido": True, "dentro_proj": True},
+            {
+                "nome": "Incerto",
+                "perc_votos": 8.0,
+                "sf_e": "n",
+                "dentro_proj": True,
+                "garantido": False,
+            },
+            {
+                "nome": "Fora",
+                "perc_votos": 7.0,
+                "sf_e": "n",
+                "dentro_proj": False,
+                "cadeiras_proj": 2,
+                "posicao_legenda": 3,
+                "margem_corte": 100,
+            },
+        ]
+        entry = {
+            "candidatos": candidatos,
+            "proporcional": True,
+            "garantidos_resumo": {"total": 2, "legendas": []},
+        }
+        panel = PanelConfig(key="sp:6", printables=12, collapse_garantidos=True)
+        sliced = _slice_entry(entry, panel)
+        nomes = [c["nome"] for c in sliced["candidatos"]]
+        self.assertEqual(nomes, ["Incerto", "Fora"])
+
+    def test_slice_filtrado_oculta_fora_da_margem(self):
+        candidatos = [
+            {
+                "nome": "Incerto",
+                "perc_votos": 8.0,
+                "sf_e": "n",
+                "dentro_proj": True,
+                "garantido": False,
+            },
+            {
+                "nome": "Fora margem",
+                "perc_votos": 1.0,
+                "sf_e": "n",
+                "dentro_proj": False,
+                "cadeiras_proj": 2,
+                "posicao_legenda": 3,
+                "eliminado_mat": True,
+            },
+        ]
+        entry = {"candidatos": candidatos, "proporcional": True}
+        panel = PanelConfig(key="sp:6", printables=12, collapse_garantidos=True)
+        sliced = _slice_entry(entry, panel)
+        nomes = [c["nome"] for c in sliced["candidatos"]]
+        self.assertEqual(nomes, ["Incerto"])
+
+    def test_slice_dispute_only(self):
+        candidatos = [
+            {"nome": "G1", "perc_votos": 10.0, "sf_e": "n", "garantido": True, "dentro_proj": True},
+            {
+                "nome": "Incerto",
+                "perc_votos": 8.0,
+                "sf_e": "n",
+                "dentro_proj": True,
+                "garantido": False,
+            },
+            {"nome": "Irrelevante", "perc_votos": 0.1, "sf_e": "n", "cadeiras_proj": 0},
+        ]
+        entry = {"candidatos": candidatos, "proporcional": True}
+        panel = PanelConfig(key="sp:6", printables=5, dispute_only=True)
+        sliced = _slice_entry(entry, panel)
+        nomes = [c["nome"] for c in sliced["candidatos"]]
+        self.assertEqual(nomes, ["Incerto"])
 
 
 if __name__ == "__main__":

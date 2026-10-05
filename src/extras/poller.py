@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from extras.eleicao import (
     EleicaoStats,
     candidatos_for_track,
+    candidatos_para_exibicao,
     candidatos_track_payload,
     entry_fingerprint,
     fetch_eleicao_stats,
@@ -17,26 +18,36 @@ MIN_WAIT_SECONDS = 5
 SESSION_TTL_SECONDS = int(os.environ.get("TSELIVESCORE_SESSION_TTL", "30"))
 
 
-def _slice_entry(entry: dict | None, printables: int) -> dict | None:
-    if entry is None:
-        return None
-    sliced = dict(entry)
-    sliced.pop("_rev", None)
-    sliced["printables"] = printables
-    candidatos = entry.get("candidatos")
-    if candidatos is not None:
-        sliced["candidatos"] = candidatos[:printables]
-        track_src = candidatos_for_track(candidatos, printables)
-        sliced["candidatos_track"] = (
-            candidatos_track_payload(track_src) if track_src else []
-        )
-    return sliced
-
-
 @dataclass
 class PanelConfig:
     key: str
     printables: int = 5
+    dispute_only: bool = False
+    collapse_garantidos: bool = True
+
+
+def _slice_entry(entry: dict | None, panel: PanelConfig) -> dict | None:
+    if entry is None:
+        return None
+    sliced = dict(entry)
+    sliced.pop("_rev", None)
+    sliced["printables"] = panel.printables
+    sliced["dispute_only"] = panel.dispute_only
+    sliced["collapse_garantidos"] = panel.collapse_garantidos
+    candidatos = entry.get("candidatos")
+    if candidatos is not None:
+        sliced["candidatos"] = candidatos_para_exibicao(
+            candidatos,
+            panel.printables,
+            proporcional=bool(entry.get("proporcional")),
+            dispute_only=panel.dispute_only,
+            collapse_garantidos=panel.collapse_garantidos,
+        )
+        track_src = candidatos_for_track(candidatos, panel.printables)
+        sliced["candidatos_track"] = (
+            candidatos_track_payload(track_src) if track_src else []
+        )
+    return sliced
 
 
 @dataclass
@@ -261,7 +272,7 @@ class ElectionPoller:
             revs_out[panel.key] = content_rev
             if entry is not None and client_revs.get(panel.key) == content_rev:
                 continue
-            panels_out[panel.key] = _slice_entry(entry, panel.printables)
+            panels_out[panel.key] = _slice_entry(entry, panel)
         return panels_out, revs_out
 
     def _poll_panel(self, panel: PanelConfig, mock_tick: int = 0):

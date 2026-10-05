@@ -42,7 +42,7 @@ let columnFitObserver = null;
 let sessionId = null;
 let cachedPanelsData = {};
 const panelRevs = {};
-const panelRevsPrintables = {};
+const panelRevsSlice = {};
 const prevDeltas = new Map();
 const panelTickHistory = new Map();
 const prevMockTick = new Map();
@@ -288,6 +288,11 @@ function formatDeltaCell(rollingDelta) {
 }
 
 function panelCutoffIndex(data) {
+  const cands = data?.candidatos || [];
+  if (data?.proporcional && data.dispute_only) {
+    const idx = cands.findIndex((cand) => !cand.dentro_proj);
+    return idx >= 0 ? idx : cands.length;
+  }
   const qtdVagas = Number(data?.qtd_vagas) || 1;
   if (data?.segundo_turno) return 2;
   return qtdVagas;
@@ -360,11 +365,20 @@ function trackingCandidates(data) {
   return visible.concat(track);
 }
 
+function panelSliceSignature(panel) {
+  if (!panel) return "";
+  return [
+    panel.printables,
+    panel.disputeOnly ? 1 : 0,
+    panel.collapseGarantidos ? 1 : 0,
+  ].join(":");
+}
+
 function sessionRevsPayload() {
   const revs = {};
   for (const panel of panels) {
     if (
-      panelRevsPrintables[panel.key] === panel.printables &&
+      panelRevsSlice[panel.key] === panelSliceSignature(panel) &&
       panelRevs[panel.key] != null
     ) {
       revs[panel.key] = panelRevs[panel.key];
@@ -378,7 +392,7 @@ function applySessionPanelRevs(data) {
   for (const [key, rev] of Object.entries(data.panel_revs)) {
     panelRevs[key] = rev;
     const panel = panels.find((p) => p.key === key);
-    if (panel) panelRevsPrintables[key] = panel.printables;
+    if (panel) panelRevsSlice[key] = panelSliceSignature(panel);
   }
 }
 
@@ -393,7 +407,7 @@ function mergeSessionPanels(data) {
     if (!activeKeys.has(key)) {
       delete merged[key];
       delete panelRevs[key];
-      delete panelRevsPrintables[key];
+      delete panelRevsSlice[key];
     }
   }
   cachedPanelsData = merged;
@@ -404,7 +418,7 @@ function mergeSessionPanels(data) {
 function resetSessionPanelCache() {
   cachedPanelsData = {};
   for (const key of Object.keys(panelRevs)) delete panelRevs[key];
-  for (const key of Object.keys(panelRevsPrintables)) delete panelRevsPrintables[key];
+  for (const key of Object.keys(panelRevsSlice)) delete panelRevsSlice[key];
   try {
     sessionStorage.removeItem(PANEL_CACHE_KEY);
   } catch (_) {}
@@ -416,7 +430,8 @@ function loadPanelCache() {
     if (!raw) return;
     const data = JSON.parse(raw);
     Object.assign(panelRevs, data.revs || {});
-    Object.assign(panelRevsPrintables, data.revsPrintables || {});
+    const legacySlice = data.revsSlice || data.revsPrintables || {};
+    Object.assign(panelRevsSlice, legacySlice);
     cachedPanelsData = data.panels || {};
   } catch (_) {}
 }
@@ -427,7 +442,7 @@ function savePanelCache() {
       PANEL_CACHE_KEY,
       JSON.stringify({
         revs: panelRevs,
-        revsPrintables: panelRevsPrintables,
+        revsSlice: panelRevsSlice,
         panels: cachedPanelsData,
       })
     );
@@ -838,14 +853,31 @@ async function createDefaultPanels() {
     id: uid(),
     key,
     printables: printablesList[index],
+    disputeOnly: true,
+    collapseGarantidos: true,
   }));
 }
 
+function normalizePanel(panel) {
+  const base = panel.key
+    ? panel
+    : panel.cod === "br"
+      ? { ...panel, key: "br:1" }
+      : panel.cod
+        ? { ...panel, key: `${panel.cod}:3` }
+        : { ...panel, key: "br:1" };
+  const fullList = base.viewMode === "full" || (
+    base.disputeOnly === false && base.collapseGarantidos === false
+  );
+  return {
+    ...base,
+    disputeOnly: !fullList,
+    collapseGarantidos: !fullList,
+  };
+}
+
 function migratePanel(panel) {
-  if (panel.key) return panel;
-  if (panel.cod === "br") return { ...panel, key: "br:1" };
-  if (panel.cod) return { ...panel, key: `${panel.cod}:3` };
-  return { ...panel, key: "br:1" };
+  return normalizePanel(panel);
 }
 
 async function loadState() {
@@ -1141,7 +1173,7 @@ function renderPanels() {
       panels = panels.filter((p) => p.id !== panel.id);
       delete cachedPanelsData[removedKey];
       delete panelRevs[removedKey];
-      delete panelRevsPrintables[removedKey];
+      delete panelRevsSlice[removedKey];
       saveState();
       renderPanels();
       sendHeartbeat();
@@ -1151,6 +1183,11 @@ function renderPanels() {
       const max = Number(input.max) || PRINTABLES_HARD_MAX;
       panel.printables = clampPrintables(input.value, max);
       input.value = panel.printables;
+      saveState();
+      sendHeartbeat();
+    });
+    node.querySelector(".panel-view-mode")?.addEventListener("change", (e) => {
+      applyPanelViewMode(panel, e.target.value);
       saveState();
       sendHeartbeat();
     });
@@ -1513,6 +1550,56 @@ function isPanelMatDefined(data) {
   return mat === "E" || mat === "S";
 }
 
+function panelViewMode(panel) {
+  if (panel?.disputeOnly === false && panel?.collapseGarantidos === false) {
+    return "full";
+  }
+  return "dispute";
+}
+
+function applyPanelViewMode(panel, mode) {
+  if (!panel) return;
+  if (mode === "full") {
+    panel.disputeOnly = false;
+    panel.collapseGarantidos = false;
+  } else {
+    panel.disputeOnly = true;
+    panel.collapseGarantidos = true;
+  }
+}
+
+function syncPanelViewBar(panelEl, panel, data) {
+  const bar = panelEl?.querySelector(".panel-view-bar");
+  if (!bar || !panel) return;
+  const show = Boolean(data?.proporcional);
+  bar.hidden = !show;
+  if (!show) return;
+  const select = bar.querySelector(".panel-view-mode");
+  if (!select) return;
+  const mode = panelViewMode(panel);
+  if (select.value !== mode) select.value = mode;
+}
+
+function formatGarantidosResumo(resumo) {
+  if (!resumo?.total) return "";
+  const legendas = (resumo.legendas || [])
+    .slice(0, 6)
+    .map((leg) => `${leg.sigla} ${leg.total}`)
+    .join(" · ");
+  const extra = (resumo.legendas?.length || 0) > 6 ? " · …" : "";
+  return `${resumo.total} eleito${resumo.total === 1 ? "" : "s"} (mat.) garantido${resumo.total === 1 ? "" : "s"} — ${legendas}${extra}`;
+}
+
+function appendGarantidosSummaryRow(tbody, resumo, onExpand) {
+  if (!resumo?.total || !tbody) return;
+  const tr = document.createElement("tr");
+  tr.className = "garantidos-summary";
+  const title = formatGarantidosResumo(resumo);
+  tr.innerHTML = `<td class="col-name" colspan="6"><span class="garantidos-summary-label" title="Clique para expandir">▶ ${title}</span></td>`;
+  tr.querySelector(".garantidos-summary-label")?.addEventListener("click", onExpand);
+  tbody.appendChild(tr);
+}
+
 function syncPanelSettledState(panelEl, data) {
   if (!panelEl) return;
   const settled = Boolean(data && !data.error && isPanelMatDefined(data));
@@ -1833,6 +1920,8 @@ function renderPanelData(panelEl, data, panelKey = "") {
 
   errorEl.textContent = "";
   syncPanelSettledState(panelEl, data);
+  const panelState = panels.find((p) => p.id === panelEl.dataset.id);
+  syncPanelViewBar(panelEl, panelState, data);
   panelEl.querySelector(".panel-title").textContent = data.title || panelLabel(data.key);
   renderPanelCounts(panelEl, data);
 
@@ -1861,6 +1950,19 @@ function renderPanelData(panelEl, data, panelKey = "") {
   const qtdVagas = Number(data.qtd_vagas) || 1;
   const cutoffIdx = panelCutoffIndex(data);
   const panelId = panelEl.dataset.id;
+  const showGarantidosSummary =
+    isProporcional &&
+    data.dispute_only &&
+    (data.garantidos_resumo?.total || 0) > 0;
+  if (showGarantidosSummary) {
+    appendGarantidosSummaryRow(tbody, data.garantidos_resumo, () => {
+      const panel = panels.find((p) => p.id === panelId);
+      if (!panel) return;
+      applyPanelViewMode(panel, "full");
+      saveState();
+      sendHeartbeat();
+    });
+  }
   data.candidatos?.forEach((cand, idx) => {
     const tr = document.createElement("tr");
     if (isProporcional) {
@@ -2181,7 +2283,7 @@ addForm.addEventListener("submit", (e) => {
     alert("Esse painel já está no dashboard.");
     return;
   }
-  panels.push({ id: uid(), key, printables });
+  panels.push({ id: uid(), key, printables, disputeOnly: true, collapseGarantidos: true });
   saveState();
   renderPanels();
   sendHeartbeat();

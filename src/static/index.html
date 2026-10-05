@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TSELiveScore</title>
-    <link rel="stylesheet" href="/static/style.css?v=51" />
+    <link rel="stylesheet" href="/static/style.css?v=53" />
   </head>
   <body>
     <header class="toolbar">
@@ -173,6 +173,15 @@
           <div class="panel-stats"></div>
           <div class="panel-updated"></div>
         </div>
+        <div class="panel-view-bar" hidden>
+          <label class="panel-view-label">
+            <span>Exibição</span>
+            <select class="panel-view-mode" title="Modo de exibição da lista">
+              <option value="dispute" selected>Só disputa</option>
+              <option value="full">Lista completa</option>
+            </select>
+          </label>
+        </div>
         <div class="panel-alert"></div>
         <table class="candidates">
           <colgroup>
@@ -198,6 +207,6 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=100"></script>
+    <script src="/static/app.js?v=104"></script>
   </body>
 </html>

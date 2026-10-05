@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from extras.fixtures import MOCK_ENABLED
 from extras.panel_defaults import (
@@ -32,9 +32,13 @@ rate_limiter = build_rate_limiter()
 
 
 class PanelRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
     key: str
     printables: int = Field(default=5, ge=0, le=50)
+    dispute_only: bool = Field(default=False, alias="disputeOnly")
+    collapse_garantidos: bool = Field(default=True, alias="collapseGarantidos")
 
     @field_validator("key")
     @classmethod
@@ -88,7 +92,15 @@ def panel_defaults(key: str):
 @app.post("/api/session")
 def heartbeat(body: SessionRequest, request: Request):
     enforce_rate_limit(request)
-    panels = [PanelConfig(key=p.key, printables=p.printables) for p in body.panels]
+    panels = [
+        PanelConfig(
+            key=p.key,
+            printables=p.printables,
+            dispute_only=p.dispute_only,
+            collapse_garantidos=p.collapse_garantidos,
+        )
+        for p in body.panels
+    ]
     snapshot, panel_revs = poller.touch_session(
         body.session_id, panels, body.wait, body.revs
     )

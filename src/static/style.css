@@ -509,8 +509,50 @@ button:hover {
   gap: 0.35rem;
 }
 
+.panel-view-bar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.panel-view-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.panel-view-mode {
+  font-size: 0.75rem;
+  padding: 0.12rem 0.25rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  max-width: 100%;
+}
+
 .panel-printables {
   width: 3rem;
+}
+
+.candidates tr.garantidos-summary td {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  border-top: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.garantidos-summary-label {
+  cursor: pointer;
+  user-select: none;
+}
+
+.garantidos-summary-label:hover {
+  color: var(--text);
 }
 
 .panel-remove {

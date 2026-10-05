@@ -66,6 +66,98 @@ def candidatos_for_track(candidatos, printables: int) -> list:
     return [cand for cand in tail if cand_is_track_relevant(cand)]
 
 
+DISPUTA_EXIBICAO_MAX = 50
+
+
+def cand_oculto_em_modo_filtrado(cand) -> bool:
+    return bool(
+        _cand_get(cand, "eliminado_mat") or _cand_get(cand, "eliminado_definitivo")
+    )
+
+
+def cand_is_disputa_proporcional(cand) -> bool:
+    if cand_oculto_em_modo_filtrado(cand):
+        return False
+    if _cand_get(cand, "em_perigo"):
+        return True
+    sf_e = _cand_sf_e(cand)
+    if _cand_get(cand, "dentro_proj"):
+        if sf_e not in ("n", "", None):
+            return False
+        return not _cand_get(cand, "garantido")
+    seats = int(_cand_get(cand, "cadeiras_proj") or 0)
+    if seats <= 0:
+        return False
+    pos = int(_cand_get(cand, "posicao_legenda") or 999)
+    if pos - seats <= 2:
+        return True
+    margem = _cand_get(cand, "margem_corte")
+    rest = int(_cand_get(cand, "restantes_legenda") or 0)
+    if margem is not None and rest > 0 and margem <= rest:
+        return True
+    return False
+
+
+def cand_is_garantido_ocultavel(cand) -> bool:
+    if _cand_get(cand, "em_perigo"):
+        return False
+    if _cand_sf_e(cand) not in ("n", "", None):
+        return False
+    return bool(_cand_get(cand, "garantido"))
+
+
+def calc_garantidos_resumo(candidatos, proporcional: bool) -> dict | None:
+    if not proporcional or not candidatos:
+        return None
+    garantidos = [c for c in candidatos if cand_is_garantido_ocultavel(c)]
+    if not garantidos:
+        return {"total": 0, "legendas": []}
+    por_legenda: dict[str, int] = {}
+    for cand in garantidos:
+        sigla = _cand_get(cand, "legenda_sigla") or _cand_get(cand, "partido_sg") or "?"
+        por_legenda[sigla] = por_legenda.get(sigla, 0) + 1
+    legendas = sorted(
+        [{"sigla": sigla, "total": total} for sigla, total in por_legenda.items()],
+        key=lambda row: (-row["total"], row["sigla"]),
+    )
+    return {"total": len(garantidos), "legendas": legendas}
+
+
+def candidatos_para_exibicao(
+    candidatos,
+    printables: int,
+    *,
+    proporcional: bool,
+    dispute_only: bool,
+    collapse_garantidos: bool,
+) -> list:
+    if not candidatos:
+        return []
+    if not proporcional:
+        if printables == -1:
+            return list(candidatos)
+        return list(candidatos[: max(0, int(printables or 0))])
+
+    if collapse_garantidos and not dispute_only:
+        dispute_only = True
+
+    modo_filtrado = dispute_only
+
+    if dispute_only:
+        visiveis = [c for c in candidatos if cand_is_disputa_proporcional(c)]
+        visiveis = visiveis[:DISPUTA_EXIBICAO_MAX]
+    else:
+        visiveis = list(candidatos)
+        if collapse_garantidos:
+            visiveis = [c for c in visiveis if not cand_is_garantido_ocultavel(c)]
+        if printables != -1:
+            visiveis = visiveis[: max(0, int(printables or 0))]
+
+    if modo_filtrado:
+        visiveis = [c for c in visiveis if not cand_oculto_em_modo_filtrado(c)]
+    return visiveis
+
+
 def candidatos_track_payload(candidatos) -> list[dict]:
     rows = []
     for cand in candidatos or []:
@@ -665,6 +757,9 @@ class EleicaoStats:
             if self._qtd_printable != -1
             else self.candidatos
         )
+        garantidos_resumo = calc_garantidos_resumo(
+            self.candidatos, self.proporcional
+        )
 
         return {
             "key": self._panel_key,
@@ -690,6 +785,7 @@ class EleicaoStats:
             "qtd_vagas": self.qtd_vagas,
             "vagas_preenchidas": self.vagas_preenchidas,
             "qtd_candidatos": len(self.candidatos),
+            "garantidos_resumo": garantidos_resumo,
             "candidatos": [c.to_dict() for c in filtered],
             "updated_at": datetime.now().isoformat(),
         }
