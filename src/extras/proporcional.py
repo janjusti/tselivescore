@@ -642,8 +642,13 @@ def proporcional_sort_key(cand):
     if _cand_field(cand, "dentro_proj"):
         return (1, pos, -votos)
 
-    gap = pos - seats if seats > 0 else pos
-    return (2, gap, pos, -votos)
+    if seats > 0:
+        gap = pos - seats
+        margem = _cand_field(cand, "margem_corte")
+        margem_ord = margem if margem is not None else 10**18
+        return (2, gap, margem_ord, -votos)
+
+    return (3, pos, -votos)
 
 
 def sort_candidatos_proporcional(candidatos) -> None:

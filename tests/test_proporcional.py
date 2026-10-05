@@ -12,6 +12,7 @@ from extras.proporcional import (
     distribute_cadeiras_tse,
     min_cadeiras_por_legenda,
     min_votos_frac,
+    sort_candidatos_proporcional,
 )
 
 
@@ -237,6 +238,36 @@ class TestGarantiaMatematica(unittest.TestCase):
         dentro = [c for c in prev["candidatos"] if c.get("dentro_proj")]
         self.assertEqual(len(dentro), prev["qtd_vagas"])
         self.assertTrue(all(c.get("garantido") for c in dentro))
+
+
+class TestSortProporcional(unittest.TestCase):
+    def test_fora_prioriza_legenda_com_cadeira_e_margem(self):
+        cands = [
+            {
+                **_cand("ELEITO PP", 120_000, "PP"),
+                "posicao_legenda": 2,
+                "cadeiras_proj": 2,
+                "dentro_proj": True,
+                "margem_corte": 900,
+                "margem_folga": True,
+            },
+            {
+                **_cand("ROBINSON PP", 119_000, "PP"),
+                "posicao_legenda": 3,
+                "cadeiras_proj": 2,
+                "dentro_proj": False,
+                "margem_corte": 900,
+                "margem_folga": False,
+            },
+            {
+                **_cand("CINTIA PDT", 5_000, "PDT"),
+                "posicao_legenda": 1,
+                "cadeiras_proj": 0,
+                "dentro_proj": False,
+            },
+        ]
+        sort_candidatos_proporcional(cands)
+        self.assertEqual([c["nome"] for c in cands], ["ELEITO PP", "ROBINSON PP", "CINTIA PDT"])
 
 
 if __name__ == "__main__":
