@@ -1525,23 +1525,42 @@ function syncPanelSettledState(panelEl, data) {
   }
 }
 
+function sfStBadgeHtml(sfSt) {
+  const st = String(sfSt || "").trim();
+  if (!st) return "";
+  const norm = st.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  if (norm === "2o turno") {
+    return '<span class="badge badge-turno">2º turno</span>';
+  }
+  return `<span class="badge badge-st">${st}</span>`;
+}
+
 function formatBadges(cand, isProporcional = false, segundoTurno = false, pct = 0) {
   const badges = [];
   const elim = candEliminacaoProp(cand, pct, isProporcional);
+  let statusAdded = false;
+
   if (isCandEleitoOficial(cand, isProporcional, segundoTurno)) {
     badges.push('<span class="badge badge-elected">Eleito</span>');
+    statusAdded = true;
   } else if (cand.sf_e === "s" && segundoTurno) {
     badges.push('<span class="badge badge-turno">2º turno</span>');
+    statusAdded = true;
   } else if (cand.garantido_turno && segundoTurno) {
     badges.push('<span class="badge badge-turno-mat">2ºT mat.</span>');
+    statusAdded = true;
   } else if (isCandEleitoMat(cand, isProporcional)) {
     badges.push('<span class="badge badge-elected-mat">Eleito (mat.)</span>');
+    statusAdded = true;
   } else if (elim.foraMargem) {
     badges.push('<span class="badge badge-margin-mat">Fora da margem (mat.)</span>');
+    statusAdded = true;
   }
-  if (cand.sf_st) {
-    badges.push(`<span class="badge badge-st">${cand.sf_st}</span>`);
+
+  if (cand.sf_st && !statusAdded) {
+    badges.push(sfStBadgeHtml(cand.sf_st));
   }
+
   return badges.length ? `<div class="cand-badges">${badges.join("")}</div>` : "";
 }
 

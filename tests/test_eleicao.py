@@ -160,6 +160,17 @@ class TestMatDefSenador(unittest.TestCase):
         mat_def, _ = infer_mat_def_segundo_turno(cands, 854_711, 5_428_698)
         self.assertEqual(mat_def, "")
 
+    def test_governador_rj_vv_defasado_nao_declara_eleito_abaixo_de_50(self):
+        """RJ 2026: vv do TSE defasado vs pvap — líder ~49% não pode ser eleito no 1º turno."""
+        cands = [
+            _cand("DOUGLAS RUAS", 4_231_835, 49.32),
+            _cand("EDUARDO PAES", 3_664_591, 42.71),
+            _cand("GAROTINHO", 272_200, 3.17),
+        ]
+        mat_def, label = infer_mat_def_segundo_turno(cands, 72_000, 8_308_660)
+        self.assertEqual(mat_def, "S")
+        self.assertEqual(label, "Segundo turno")
+
 
 class TestDistanciaSegundoTurno(unittest.TestCase):
     def test_terceiro_mede_distancia_ao_segundo(self):
@@ -237,11 +248,11 @@ class TestMaioria1t(unittest.TestCase):
             apuracao_iniciada=True,
         )
         self.assertIsNotNone(m)
-        self.assertEqual(m["votos_necessarios"], 29_501)
+        self.assertEqual(m["votos_necessarios"], 29_730)
         self.assertEqual(m["votos_restantes"], 55_000)
         self.assertFalse(m["garantida"])
         self.assertFalse(m["impossivel"])
-        self.assertAlmostEqual(m["percentual_minimo_final"], 48.21, places=1)
+        self.assertAlmostEqual(m["percentual_minimo_final"], 48.19, places=1)
 
     def test_garantida_quando_lider_ja_passa_de_50_no_pior_caso(self):
         cands = [_cand("A", 55_000_000, 55.0), _cand("B", 30_000_000, 30.0)]

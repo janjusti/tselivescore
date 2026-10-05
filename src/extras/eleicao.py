@@ -137,6 +137,16 @@ def _cand_perc(cand) -> float:
     return cand.perc_votos if hasattr(cand, "perc_votos") else cand["perc_votos"]
 
 
+def _vv_efetivo_segundo_turno(leader, vv_tse: int) -> int:
+    """VV coerente com o pvap do líder quando o campo vv do TSE está defasado."""
+    vv_tse = max(0, int(vv_tse or 0))
+    perc = _cand_perc(leader)
+    if perc > 0:
+        vv_pvap = int(_cand_votos(leader) * 100 / perc)
+        return max(vv_tse, vv_pvap)
+    return vv_tse
+
+
 def infer_mat_def_segundo_turno(
     candidatos, aprox_votos_restantes, vv: int = 0
 ) -> tuple[str, str | None]:
@@ -146,7 +156,7 @@ def infer_mat_def_segundo_turno(
 
     restantes = max(0, int(aprox_votos_restantes or 0))
     leader, second = candidatos[0], candidatos[1]
-    vv = max(0, int(vv or 0))
+    vv = _vv_efetivo_segundo_turno(leader, vv)
 
     if vv > 0:
         min_perc_lider = _cand_votos(leader) * 100 / (vv + restantes)
@@ -157,13 +167,10 @@ def infer_mat_def_segundo_turno(
         third = candidatos[2]
         gap_2o_3o = _cand_votos(second) - _cand_votos(third)
         terceiro_nao_alcanca = gap_2o_3o > restantes
-        perc_lider = _cand_perc(leader)
-        if terceiro_nao_alcanca and perc_lider > 0:
-            vv = int(_cand_votos(leader) * 100 / perc_lider)
-            if vv > 0:
-                max_perc_lider = (_cand_votos(leader) + restantes) * 100 / (vv + restantes)
-                if max_perc_lider < 50:
-                    return "S", "Segundo turno"
+        if terceiro_nao_alcanca and vv > 0:
+            max_perc_lider = (_cand_votos(leader) + restantes) * 100 / (vv + restantes)
+            if max_perc_lider < 50:
+                return "S", "Segundo turno"
 
     return "", None
 
@@ -285,7 +292,7 @@ def calc_maioria_1t(
     if _cand_sf_e(leader) == "e":
         return None
 
-    vv = max(0, int(vv or 0))
+    vv = _vv_efetivo_segundo_turno(leader, vv)
     restantes = max(0, int(aprox_votos_restantes or 0))
     if vv <= 0:
         return None
