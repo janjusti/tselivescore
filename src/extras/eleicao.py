@@ -11,7 +11,9 @@ from extras.tse_client import (
     apuracao_por_regiao,
     build_acompanhamento_br_url,
     build_url,
+    default_turno,
     normalize_payload,
+    normalize_turno,
     parse_response,
     resolve_panel,
     tse_timezone_for_panel,
@@ -293,8 +295,9 @@ def infer_mat_def(
     cargo_cd: str,
     qtd_vagas: int,
     vv: int = 0,
+    turno: int = 1,
 ) -> tuple[str, str | None]:
-    if cargo_cd in CARGOS_SEGUNDO_TURNO:
+    if cargo_cd in CARGOS_SEGUNDO_TURNO and turno != 2:
         return infer_mat_def_segundo_turno(candidatos, aprox_votos_restantes, vv)
     if cargo_cd in CARGOS_MAJORITARIOS:
         return infer_mat_def_plurality(candidatos, aprox_votos_restantes, qtd_vagas)
@@ -353,9 +356,11 @@ def apply_mat_def_plurality(candidatos, mat_def: str, qtd_vagas: int) -> str:
     return mat_def
 
 
-def apply_mat_def(candidatos, mat_def: str, cargo_cd: str, qtd_vagas: int) -> str:
+def apply_mat_def(
+    candidatos, mat_def: str, cargo_cd: str, qtd_vagas: int, turno: int = 1
+) -> str:
     _clear_eleito_mat(candidatos)
-    if cargo_cd in CARGOS_SEGUNDO_TURNO:
+    if cargo_cd in CARGOS_SEGUNDO_TURNO and turno != 2:
         return apply_mat_def_segundo_turno(candidatos, mat_def)
     if cargo_cd in CARGOS_MAJORITARIOS:
         return apply_mat_def_plurality(candidatos, mat_def, qtd_vagas)
@@ -524,12 +529,14 @@ class EleicaoStats:
         qtd_printable: int,
         title: str,
         panel_key: str,
+        turno: int = 2,
     ):
         self._prev_stats = prev_stats
         self._raw_data = raw_data
         self._qtd_printable = qtd_printable
         self._title = title
         self._panel_key = panel_key
+        self.turno = normalize_turno(turno)
         self._filter_data()
         self._calc_aprox_votos_restantes()
         self._calc_proporcional()
@@ -604,7 +611,10 @@ class EleicaoStats:
         self.qtd_votos_validos = self.get_stat("vv")
         self.majoritario = self.cargo_cd in CARGOS_MAJORITARIOS
         self.proporcional = self.cargo_cd in CARGOS_PROPORCIONAIS
-        self.segundo_turno = self.cargo_cd in CARGOS_SEGUNDO_TURNO
+        # Regras de 1º turno (maioria absoluta / possível 2º turno). No 2º turno a disputa é simples.
+        self.segundo_turno = (
+            self.cargo_cd in CARGOS_SEGUNDO_TURNO and self.turno != 2
+        )
         self.legendas_resumo = []
 
     def _calc_proporcional(self):
@@ -712,12 +722,14 @@ class EleicaoStats:
                 self.cargo_cd,
                 int(self.qtd_vagas or 0),
                 int(self.qtd_votos_validos or 0),
+                self.turno,
             )
         apply_mat_def(
             self.candidatos,
             self.mat_def,
             self.cargo_cd,
             int(self.qtd_vagas or 0),
+            self.turno,
         )
 
     def _mat_def_eleito_oficial(self) -> bool:
@@ -776,6 +788,7 @@ class EleicaoStats:
             "apuracao_iniciada": self.perc_sec_totalizadas != 0,
             "mat_def": self.mat_def,
             "mat_def_label": self._mat_def_label(),
+            "turno": self.turno,
             "majoritario": self.majoritario,
             "proporcional": self.proporcional,
             "segundo_turno": self.segundo_turno,
@@ -791,22 +804,30 @@ class EleicaoStats:
         }
 
 
-def fetch_eleicao_stats(prev_stats, panel_key: str, qtd_printable: int = 5):
+def fetch_eleicao_stats(
+    prev_stats, panel_key: str, qtd_printable: int = 5, turno: int | None = None
+):
+    turno = default_turno() if turno is None else normalize_turno(turno)
     panel_key, _, cargo_cd = resolve_panel(panel_key)
-    titulo, url, _ = build_url(panel_key)
+    titulo, url, _ = build_url(panel_key, turno)
     req = torequests.execute(url, "GET")
     if req["status"] != "ok":
         return None, f"requisição falhou: {req['status']}"
+    response = req["req"]
+    if response is not None and getattr(response, "status_code", 200) >= 400:
+        return None, f"TSE HTTP {response.status_code}"
     try:
-        payload = parse_response(req["req"].text)
+        payload = parse_response(response.text)
         raw_data = normalize_payload(payload, cargo_cd)
     except Exception as exc:
         return None, f"erro ao processar resposta: {exc}"
 
-    stats = EleicaoStats(prev_stats, raw_data, qtd_printable, titulo, panel_key)
+    stats = EleicaoStats(
+        prev_stats, raw_data, qtd_printable, titulo, panel_key, turno=turno
+    )
     if cargo_cd == CARGO_PRESIDENTE:
-        ab_req = torequests.execute(build_acompanhamento_br_url(), "GET")
-        if ab_req["status"] == "ok":
+        ab_req = torequests.execute(build_acompanhamento_br_url(turno), "GET")
+        if ab_req["status"] == "ok" and ab_req["req"] is not None:
             try:
                 stats.apuracao_regioes = apuracao_por_regiao(
                     parse_response(ab_req["req"].text)

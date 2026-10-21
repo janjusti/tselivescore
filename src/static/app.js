@@ -1,4 +1,4 @@
-const STORAGE_KEY = "tselivescore-dashboard";
+const STORAGE_KEY = "tselivescore-dashboard-t2-rn";
 const SESSION_KEY = "tselivescore-session-id";
 const AUDIO_MUTED_KEY = "tselivescore-audio-muted";
 const TV_MODE_KEY = "tselivescore-tv-mode";
@@ -16,6 +16,7 @@ const eventsBtn = document.getElementById("events-btn");
 const eventsBadgeEl = document.getElementById("events-badge");
 const eventLogDialog = document.getElementById("event-log-dialog");
 const waitInput = document.getElementById("wait-input");
+const turnoSelect = document.getElementById("turno-select");
 const addDialog = document.getElementById("add-dialog");
 const addForm = document.getElementById("add-form");
 const categorySelect = document.getElementById("category-select");
@@ -30,7 +31,10 @@ let meta = {
   session_ttl_seconds: 30,
   ufs: [],
   categories: [],
+  default_turno: 2,
+  turnos: [],
 };
+let currentTurno = 2;
 let panels = [];
 let heartbeatTimer = null;
 let heartbeatInFlight = false;
@@ -70,7 +74,7 @@ const DELTA_ROLLING_MAX_TICKS = 12;
 const DELTA_ROLLING_MIN_TICKS = 2;
 /** Majoritário: notifica eliminação só nas primeiras posições abaixo do corte. */
 const ELIM_NOTIFY_MAJ_MARGIN = 3;
-const DEFAULT_PANEL_KEYS = ["br:1", "rn:3", "rn:5", "rn:6", "rn:7"];
+const DEFAULT_PANEL_KEYS = ["br:1", "rn:3", "ac:3", "am:3", "df:3", "es:3", "to:3"];
 
 const EVENT_META = {
   eleito_mat: { label: "Eleito (mat.)", tone: "ok" },
@@ -429,6 +433,7 @@ function loadPanelCache() {
     const raw = sessionStorage.getItem(PANEL_CACHE_KEY);
     if (!raw) return;
     const data = JSON.parse(raw);
+    if (normalizeTurno(data.turno) !== currentTurno) return;
     Object.assign(panelRevs, data.revs || {});
     const legacySlice = data.revsSlice || data.revsPrintables || {};
     Object.assign(panelRevsSlice, legacySlice);
@@ -444,6 +449,7 @@ function savePanelCache() {
         revs: panelRevs,
         revsSlice: panelRevsSlice,
         panels: cachedPanelsData,
+        turno: currentTurno,
       })
     );
   } catch (_) {}
@@ -845,11 +851,45 @@ async function fetchDefaultPrintables(key) {
   }
 }
 
+function normalizeTurno(value) {
+  const n = Number(value);
+  return n === 1 ? 1 : 2;
+}
+
+function turnoConfig(turno = currentTurno) {
+  const value = normalizeTurno(turno);
+  return (meta.turnos || []).find((item) => Number(item.value) === value) || null;
+}
+
+function defaultPanelKeysForTurno(turno = currentTurno) {
+  const cfg = turnoConfig(turno);
+  if (cfg?.default_panels?.length) return cfg.default_panels;
+  return DEFAULT_PANEL_KEYS;
+}
+
+function panelAllowedForTurno(key, turno = currentTurno) {
+  const cfg = turnoConfig(turno);
+  if (!cfg?.keys) return true;
+  return cfg.keys.includes(key);
+}
+
+function applyTurnoConfig(turno = currentTurno) {
+  currentTurno = normalizeTurno(turno);
+  const cfg = turnoConfig(currentTurno);
+  if (cfg) {
+    meta.categories = cfg.categories || meta.categories;
+    meta.ufs = cfg.ufs || meta.ufs;
+  }
+  if (turnoSelect) turnoSelect.value = String(currentTurno);
+  fillCategorySelect();
+}
+
 async function createDefaultPanels() {
+  const keys = defaultPanelKeysForTurno();
   const printablesList = await Promise.all(
-    DEFAULT_PANEL_KEYS.map((key) => fetchDefaultPrintables(key))
+    keys.map((key) => fetchDefaultPrintables(key))
   );
-  return DEFAULT_PANEL_KEYS.map((key, index) => ({
+  return keys.map((key, index) => ({
     id: uid(),
     key,
     printables: printablesList[index],
@@ -880,17 +920,38 @@ function migratePanel(panel) {
   return normalizePanel(panel);
 }
 
+function resetTrackingState() {
+  resetSessionPanelCache();
+  prevCandSnapshots.clear();
+  prevLegendaSeats.clear();
+  prevPanelMatDef.clear();
+  prevPanelTseUpdate.clear();
+  prevApuracaoPct.clear();
+  prevMockTick.clear();
+  panelTickHistory.clear();
+  prevDeltas.clear();
+}
+
 async function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
+  currentTurno = normalizeTurno(meta.default_turno || 2);
   if (!raw) {
+    applyTurnoConfig(currentTurno);
     panels = await createDefaultPanels();
     return;
   }
   try {
     const data = JSON.parse(raw);
-    panels = (data.panels?.length ? data.panels : await createDefaultPanels()).map(migratePanel);
+    currentTurno = normalizeTurno(data.turno ?? meta.default_turno ?? 2);
+    applyTurnoConfig(currentTurno);
+    const loaded = (data.panels?.length ? data.panels : []).map(migratePanel);
+    panels = loaded.filter((panel) => panelAllowedForTurno(panel.key, currentTurno));
+    if (!panels.length) {
+      panels = await createDefaultPanels();
+    }
     waitInput.value = Math.max(data.wait ?? meta.default_wait, meta.min_wait);
   } catch {
+    applyTurnoConfig(currentTurno);
     panels = await createDefaultPanels();
   }
 }
@@ -956,7 +1017,11 @@ function saveState() {
   waitInput.value = clampWait(waitInput.value);
   localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({ panels, wait: Number(waitInput.value) })
+    JSON.stringify({
+      panels,
+      wait: Number(waitInput.value),
+      turno: currentTurno,
+    })
   );
 }
 
@@ -1000,7 +1065,8 @@ function fillCategorySelect() {
 
 function fillUfSelect() {
   ufSelect.innerHTML = "";
-  for (const uf of meta.ufs) {
+  const ufs = turnoConfig()?.ufs || meta.ufs || [];
+  for (const uf of ufs) {
     const el = document.createElement("option");
     el.value = uf;
     el.textContent = uf.toUpperCase();
@@ -1571,7 +1637,7 @@ function applyPanelViewMode(panel, mode) {
 function syncPanelViewBar(panelEl, panel, data) {
   const bar = panelEl?.querySelector(".panel-view-bar");
   if (!bar || !panel) return;
-  const show = Boolean(data?.proporcional);
+  const show = Boolean(data?.proporcional) && currentTurno !== 2;
   bar.hidden = !show;
   if (!show) return;
   const select = bar.querySelector(".panel-view-mode");
@@ -2146,6 +2212,7 @@ async function sendHeartbeat() {
     panels,
     wait: clampWait(waitInput.value),
     revs: sessionRevsPayload(),
+    turno: currentTurno,
   };
 
   heartbeatInFlight = true;
@@ -2225,7 +2292,9 @@ async function init() {
 
   waitInput.min = meta.min_wait;
   waitInput.value = Math.max(meta.default_wait, meta.min_wait);
-  fillCategorySelect();
+  if (turnoSelect) {
+    turnoSelect.value = String(normalizeTurno(meta.default_turno || 2));
+  }
   printablesInput.min = "0";
   sessionStorage.removeItem("tselivescore-event-log");
   renderEventLog();
@@ -2294,6 +2363,21 @@ waitInput.addEventListener("change", () => {
   waitInput.value = clampWait(waitInput.value);
   saveState();
   scheduleHeartbeat();
+  sendHeartbeat();
+});
+
+turnoSelect?.addEventListener("change", async () => {
+  const next = normalizeTurno(turnoSelect.value);
+  if (next === currentTurno) return;
+  currentTurno = next;
+  applyTurnoConfig(currentTurno);
+  panels = panels.filter((panel) => panelAllowedForTurno(panel.key, currentTurno));
+  if (!panels.length) {
+    panels = await createDefaultPanels();
+  }
+  resetTrackingState();
+  saveState();
+  renderPanels();
   sendHeartbeat();
 });
 

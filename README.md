@@ -13,7 +13,8 @@ docker compose --profile prod up --build tselivescore-prod  # produção (imagem
 
 Abra [http://localhost:8080](http://localhost:8080).
 
-- Adicione quantos painéis quiser: Presidência, governadores, deputados federais e estaduais (distritais no DF)
+- Adicione quantos painéis quiser: Presidência e governadores no 2º turno (padrão); 1º turno inclui também senadores e deputados
+- Seletor **Turno** na barra troca entre 2º (default) e 1º turno; o 1º continua disponível para consulta
 - Configure candidatos visíveis por painel
 - Refresh no TSE configurável (padrão: 5s, mínimo 5s)
 - Polling ao TSE só ocorre com navegadores abertos (sessão ativa); ao fechar a aba, para em ~30s
@@ -44,11 +45,13 @@ No VS Code ou Cursor, instale a extensão [Dev Containers](https://marketplace.v
 
 ## Cargos suportados
 
-| Painel (web) | CLI (`<uf>`) | Cargo              | Eleição TSE |
-|--------------|--------------|--------------------|-------------|
-| `br:1`       | `br`         | Presidência        | 6257        |
-| `<uf>:3`     | `<uf>`       | Governador         | 6259        |
-| `<uf>:5`     | —            | Senador            | 6259        |
-| `<uf>:6`     | —            | Deputado Federal   | 6259        |
-| `<uf>:7`     | —            | Deputado Estadual  | 6259        |
-| `df:7`       | —            | Deputado Distrital | 6259        |
+Padrão: **2º turno** (25/10/2026). No dashboard, o seletor **Turno** volta ao 1º. Na CLI, `--turno 1`.
+
+| Painel (web) | CLI (`<uf>`) | Cargo              | 1º turno | 2º turno |
+|--------------|--------------|--------------------|----------|----------|
+| `br:1`       | `br`         | Presidência        | 6257     | 6258     |
+| `<uf>:3`     | `<uf>`       | Governador         | 6259     | 6260 (AC, AM, DF, ES, RN, TO) |
+| `<uf>:5`     | —            | Senador            | 6259     | —        |
+| `<uf>:6`     | —            | Deputado Federal   | 6259     | —        |
+| `<uf>:7`     | —            | Deputado Estadual  | 6259     | —        |
+| `df:7`       | —            | Deputado Distrital | 6259     | —        |

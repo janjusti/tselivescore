@@ -15,7 +15,16 @@ from extras.panel_defaults import (
 )
 from extras.poller import MIN_WAIT_SECONDS, SESSION_TTL_SECONDS, ElectionPoller, PanelConfig
 from extras.ratelimit import build_rate_limiter, client_ip
-from extras.tse_client import UFS, dashboard_categories, resolve_panel
+from extras.tse_client import (
+    UFS,
+    dashboard_categories,
+    default_panel_keys,
+    default_turno,
+    normalize_turno,
+    resolve_panel,
+    supported_panel_keys,
+    ufs_for_turno,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_WAIT = max(int(os.environ.get("TSELIVESCORE_WAIT", "5")), MIN_WAIT_SECONDS)
@@ -51,10 +60,23 @@ class SessionRequest(BaseModel):
     panels: list[PanelRequest] = Field(default_factory=list)
     wait: int = Field(default=DEFAULT_WAIT, ge=MIN_WAIT_SECONDS, le=60)
     revs: dict[str, int] = Field(default_factory=dict)
+    turno: int = Field(default_factory=default_turno)
 
 
 class SessionEndRequest(BaseModel):
     session_id: str
+
+
+def _turno_meta(turno: int) -> dict:
+    turno = normalize_turno(turno)
+    return {
+        "value": turno,
+        "label": "2º turno" if turno == 2 else "1º turno",
+        "categories": dashboard_categories(turno),
+        "ufs": ufs_for_turno(turno),
+        "default_panels": default_panel_keys(turno),
+        "keys": supported_panel_keys(turno),
+    }
 
 
 def enforce_rate_limit(request: Request) -> None:
@@ -66,15 +88,18 @@ def enforce_rate_limit(request: Request) -> None:
 
 @app.get("/api/meta")
 def meta():
+    turno = default_turno()
     return {
         "ufs": UFS,
-        "categories": dashboard_categories(),
+        "categories": dashboard_categories(turno),
         "default_wait": DEFAULT_WAIT,
         "min_wait": MIN_WAIT_SECONDS,
         "session_ttl_seconds": SESSION_TTL_SECONDS,
         "mock": MOCK_ENABLED,
         "min_printables": MIN_PANEL_PRINTABLES,
         "max_default_printables": MAX_DEFAULT_PRINTABLES,
+        "default_turno": turno,
+        "turnos": [_turno_meta(2), _turno_meta(1)],
     }
 
 
@@ -92,12 +117,14 @@ def panel_defaults(key: str):
 @app.post("/api/session")
 def heartbeat(body: SessionRequest, request: Request):
     enforce_rate_limit(request)
+    turno = normalize_turno(body.turno)
     panels = [
         PanelConfig(
             key=p.key,
             printables=p.printables,
             dispute_only=p.dispute_only,
             collapse_garantidos=p.collapse_garantidos,
+            turno=turno,
         )
         for p in body.panels
     ]

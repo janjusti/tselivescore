@@ -12,7 +12,7 @@ from extras.eleicao import (
     fetch_eleicao_stats,
 )
 from extras.fixtures import MOCK_ENABLED, fetch_mock_panel, reset_mock_state
-from extras.tse_client import resolve_panel
+from extras.tse_client import default_turno, normalize_turno, resolve_panel
 
 MIN_WAIT_SECONDS = 5
 SESSION_TTL_SECONDS = int(os.environ.get("TSELIVESCORE_SESSION_TTL", "30"))
@@ -24,6 +24,10 @@ class PanelConfig:
     printables: int = 5
     dispute_only: bool = False
     collapse_garantidos: bool = True
+    turno: int = 2
+
+    def cache_key(self) -> str:
+        return f"{normalize_turno(self.turno)}:{self.key}"
 
 
 def _slice_entry(entry: dict | None, panel: PanelConfig) -> dict | None:
@@ -34,6 +38,7 @@ def _slice_entry(entry: dict | None, panel: PanelConfig) -> dict | None:
     sliced["printables"] = panel.printables
     sliced["dispute_only"] = panel.dispute_only
     sliced["collapse_garantidos"] = panel.collapse_garantidos
+    sliced["turno"] = normalize_turno(panel.turno)
     candidatos = entry.get("candidatos")
     if candidatos is not None:
         sliced["candidatos"] = candidatos_para_exibicao(
@@ -137,7 +142,12 @@ class ElectionPoller:
                 {
                     "session_id": sid,
                     "panels": [
-                        {"key": p.key, "printables": p.printables} for p in s.panels
+                        {
+                            "key": p.key,
+                            "printables": p.printables,
+                            "turno": p.turno,
+                        }
+                        for p in s.panels
                     ],
                     "wait": s.wait,
                     "last_seen_seconds_ago": round(now - s.last_seen, 1),
@@ -164,7 +174,8 @@ class ElectionPoller:
             "active_sessions": len(sessions),
             "sessions": sessions,
             "merged_panels": [
-                {"key": p.key, "printables": p.printables} for p in merged
+                {"key": p.key, "printables": p.printables, "turno": p.turno}
+                for p in merged
             ],
             "last_tse_poll_seconds_ago": (
                 round(now - last_poll_at, 1) if last_poll_at is not None else None
@@ -191,7 +202,9 @@ class ElectionPoller:
                 self._poll_panel(panel, mock_tick=mock_tick)
             with self._state.lock:
                 self._state.last_tse_poll_at = time.time()
-                self._state.last_tse_poll_panels = [panel.key for panel in panels]
+                self._state.last_tse_poll_panels = [
+                    panel.cache_key() for panel in panels
+                ]
                 self._state.tse_poll_total += len(panels)
         finally:
             self._poll_lock.release()
@@ -201,7 +214,7 @@ class ElectionPoller:
             cache = self._state.cache
             last_poll_at = self._state.last_tse_poll_at
         for panel in panels:
-            if panel.key not in cache:
+            if panel.cache_key() not in cache:
                 return True
         if last_poll_at is None:
             return True
@@ -238,9 +251,10 @@ class ElectionPoller:
             if session.last_seen < cutoff:
                 continue
             for panel in session.panels:
-                current = merged.get(panel.key)
+                cache_key = panel.cache_key()
+                current = merged.get(cache_key)
                 if not current or panel.printables > current.printables:
-                    merged[panel.key] = panel
+                    merged[cache_key] = panel
         return list(merged.values())
 
     def _merged_panels(self) -> list[PanelConfig]:
@@ -256,7 +270,7 @@ class ElectionPoller:
 
     @staticmethod
     def _panel_signature(panels: list[PanelConfig]) -> tuple:
-        return tuple((panel.key, panel.printables) for panel in panels)
+        return tuple((panel.cache_key(), panel.printables) for panel in panels)
 
     def _snapshot_for(
         self, panels: list[PanelConfig], client_revs: dict[str, int] | None = None
@@ -267,7 +281,7 @@ class ElectionPoller:
         panels_out: dict = {}
         revs_out: dict[str, int] = {}
         for panel in panels:
-            entry = cache.get(panel.key)
+            entry = cache.get(panel.cache_key())
             content_rev = (entry or {}).get("_rev", 0)
             revs_out[panel.key] = content_rev
             if entry is not None and client_revs.get(panel.key) == content_rev:
@@ -277,19 +291,21 @@ class ElectionPoller:
 
     def _poll_panel(self, panel: PanelConfig, mock_tick: int = 0):
         panel_key, _, _ = resolve_panel(panel.key)
+        turno = normalize_turno(panel.turno or default_turno())
+        cache_key = panel.cache_key()
         if MOCK_ENABLED:
             with self._state.lock:
-                prev_cache = self._state.cache.get(panel_key)
-            entry = fetch_mock_panel(panel_key, prev_cache, mock_tick)
+                prev_cache = self._state.cache.get(cache_key)
+            entry = fetch_mock_panel(panel_key, prev_cache, mock_tick, turno=turno)
             entry["_rev"] = entry_fingerprint(entry)
             with self._state.lock:
-                self._state.cache[panel_key] = entry
+                self._state.cache[cache_key] = entry
             return
 
         with self._state.lock:
-            prev = self._state.prev_stats.get(panel_key)
+            prev = self._state.prev_stats.get(cache_key)
 
-        stats, error = fetch_eleicao_stats(prev, panel_key, -1)
+        stats, error = fetch_eleicao_stats(prev, panel_key, -1, turno=turno)
         entry = {
             "key": panel_key,
             "error": error,
@@ -298,11 +314,11 @@ class ElectionPoller:
         if stats is not None:
             entry.update(stats.to_dict())
             with self._state.lock:
-                self._state.prev_stats[panel_key] = stats
+                self._state.prev_stats[cache_key] = stats
 
         entry["_rev"] = entry_fingerprint(entry)
         with self._state.lock:
-            self._state.cache[panel_key] = entry
+            self._state.cache[cache_key] = entry
 
     def _loop(self):
         while True:

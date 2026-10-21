@@ -10,6 +10,7 @@ services:
       TSELIVESCORE_SESSION_TTL: 30
       TSELIVESCORE_RATE_LIMIT: 120
       TSELIVESCORE_RATE_WINDOW: 60
+      TSELIVESCORE_TURNO: 2
 
   tselivescore:
     build: .

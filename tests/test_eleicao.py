@@ -138,6 +138,14 @@ class TestMatDefSenador(unittest.TestCase):
         mat_def, _ = infer_mat_def(cands, 0, CARGO_GOVERNADOR, 1)
         self.assertEqual(mat_def, "S")
 
+    def test_governador_no_2t_nao_infere_novo_turno(self):
+        cands = [
+            _cand("A", 4_200_000, 52.0),
+            _cand("B", 3_800_000, 48.0),
+        ]
+        mat_def, _ = infer_mat_def(cands, 0, CARGO_GOVERNADOR, 1, 0, 2)
+        self.assertEqual(mat_def, "E")
+
     def test_md_minusculo_do_tse_aplica_eleito_mat_sem_garantido_turno(self):
         cands = [
             _cand("RIEDEL", 768_000, 67.32),

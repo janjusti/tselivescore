@@ -1,12 +1,21 @@
 import base64
 import json
+import os
 from zoneinfo import ZoneInfo
 
 TSE_BASE_URL = "https://resultados.tse.jus.br/oficial/ele2026"
 TSE_REFERER = "https://resultados.tse.jus.br/oficial/app/index.html"
 
-ELEICAO_FEDERAL = "6257"
-ELEICAO_ESTADUAL = "6259"
+# 1º turno (04/10/2026) e 2º turno (25/10/2026) — códigos do ele-c.json do TSE.
+ELEICAO_FEDERAL_T1 = "6257"
+ELEICAO_FEDERAL_T2 = "6258"
+ELEICAO_ESTADUAL_T1 = "6259"
+ELEICAO_ESTADUAL_T2 = "6260"
+ELEICAO_FEDERAL = ELEICAO_FEDERAL_T1
+ELEICAO_ESTADUAL = ELEICAO_ESTADUAL_T1
+
+# UFs com 2º turno de governador em 2026 (eleição 6260).
+UFS_SEGUNDO_TURNO = ["ac", "am", "df", "es", "rn", "to"]
 
 CARGO_PRESIDENTE = "1"
 CARGO_GOVERNADOR = "3"
@@ -77,6 +86,67 @@ REGIAO_ORDER = [
 UF_TO_REGIAO = {
     uf: regiao for regiao, ufs in REGIOES_BR.items() for uf in ufs
 }
+
+
+def normalize_turno(turno) -> int:
+    try:
+        value = int(turno)
+    except (TypeError, ValueError):
+        value = 2
+    return 2 if value == 2 else 1
+
+
+def default_turno() -> int:
+    return normalize_turno(os.environ.get("TSELIVESCORE_TURNO", "2"))
+
+
+def eleicao_id(cargo_cd: str, turno: int = 2) -> str:
+    turno = normalize_turno(turno)
+    if cargo_cd == CARGO_PRESIDENTE:
+        return ELEICAO_FEDERAL_T2 if turno == 2 else ELEICAO_FEDERAL_T1
+    return ELEICAO_ESTADUAL_T2 if turno == 2 else ELEICAO_ESTADUAL_T1
+
+
+def ufs_for_turno(turno: int = 2) -> list[str]:
+    if normalize_turno(turno) == 2:
+        return list(UFS_SEGUNDO_TURNO)
+    return list(UFS)
+
+
+def default_panel_keys(turno: int = 2) -> list[str]:
+    if normalize_turno(turno) == 2:
+        outros = [uf for uf in UFS_SEGUNDO_TURNO if uf != "rn"]
+        return [
+            f"br:{CARGO_PRESIDENTE}",
+            f"rn:{CARGO_GOVERNADOR}",
+            *[f"{uf}:{CARGO_GOVERNADOR}" for uf in outros],
+        ]
+    return [
+        f"br:{CARGO_PRESIDENTE}",
+        f"rn:{CARGO_GOVERNADOR}",
+        f"rn:{CARGO_SENADOR}",
+        f"rn:{CARGO_DEP_FEDERAL}",
+        f"rn:{CARGO_DEP_ESTADUAL}",
+    ]
+
+
+def supported_panel_keys(turno: int = 2) -> list[str] | None:
+    if normalize_turno(turno) != 2:
+        return None
+    return [f"br:{CARGO_PRESIDENTE}"] + [
+        f"{uf}:{CARGO_GOVERNADOR}" for uf in UFS_SEGUNDO_TURNO
+    ]
+
+
+def panel_supported(key: str, turno: int = 2) -> bool:
+    _, uf, cargo_cd = resolve_panel(key)
+    if normalize_turno(turno) != 2:
+        return True
+    if cargo_cd == CARGO_PRESIDENTE:
+        return uf == "br"
+    if cargo_cd == CARGO_GOVERNADOR:
+        return uf in UFS_SEGUNDO_TURNO
+    return False
 
 
 def tse_timezone_for_panel(panel_key: str) -> ZoneInfo:
@@ -160,26 +230,28 @@ def resolve_panel(key: str) -> tuple[str, str, str]:
     return key, uf, cargo_cd
 
 
-def panel_title(uf: str, cargo_cd: str) -> str:
+def panel_title(uf: str, cargo_cd: str, turno: int = 2) -> str:
     cargo_nome = CARGO_LABELS[cargo_cd]
     if cargo_cd == CARGO_PRESIDENTE:
         return "Presidência"
     return f"{cargo_nome} {uf.upper()}"
 
 
-def build_url(key: str) -> tuple[str, str, str]:
+def build_url(key: str, turno: int = 2) -> tuple[str, str, str]:
     key, uf, cargo_cd = resolve_panel(key)
-    eleicao = ELEICAO_FEDERAL if cargo_cd == CARGO_PRESIDENTE else ELEICAO_ESTADUAL
+    turno = normalize_turno(turno)
+    eleicao = eleicao_id(cargo_cd, turno)
     cargo_file = cargo_cd.zfill(4)
     url = (
         f"{TSE_BASE_URL}/{eleicao}/dados/{uf}/"
         f"{uf}-c{cargo_file}-e00{eleicao}-u.jws"
     )
-    return panel_title(uf, cargo_cd), url, cargo_cd
+    return panel_title(uf, cargo_cd, turno), url, cargo_cd
 
 
-def build_acompanhamento_br_url() -> str:
-    return f"{TSE_BASE_URL}/{ELEICAO_FEDERAL}/dados/br/br-e00{ELEICAO_FEDERAL}-ab.json"
+def build_acompanhamento_br_url(turno: int = 2) -> str:
+    eleicao = eleicao_id(CARGO_PRESIDENTE, turno)
+    return f"{TSE_BASE_URL}/{eleicao}/dados/br/br-e00{eleicao}-ab.json"
 
 
 def parse_tse_num(value) -> float | None:
@@ -246,8 +318,8 @@ def apuracao_por_regiao(ab_payload: dict | None) -> list[dict]:
     return rows
 
 
-def dashboard_categories() -> list[dict]:
-    return [
+def dashboard_categories(turno: int = 2) -> list[dict]:
+    categories = [
         {
             "id": "presidente",
             "label": "Presidência",
@@ -263,26 +335,33 @@ def dashboard_categories() -> list[dict]:
             "requires_uf": True,
             "cargo": CARGO_GOVERNADOR,
         },
-        {
-            "id": "senador",
-            "label": "Senadores",
-            "singular": "Senador",
-            "requires_uf": True,
-            "cargo": CARGO_SENADOR,
-        },
-        {
-            "id": "dep_federal",
-            "label": "Deputados Federais",
-            "singular": "Deputado Federal",
-            "requires_uf": True,
-            "cargo": CARGO_DEP_FEDERAL,
-        },
-        {
-            "id": "dep_estadual",
-            "label": "Deputados Estaduais",
-            "singular": "Deputado Estadual",
-            "requires_uf": True,
-            "cargo": CARGO_DEP_ESTADUAL,
-            "uf_labels": {"df": "Deputado Distrital"},
-        },
     ]
+    if normalize_turno(turno) == 2:
+        return categories
+    categories.extend(
+        [
+            {
+                "id": "senador",
+                "label": "Senadores",
+                "singular": "Senador",
+                "requires_uf": True,
+                "cargo": CARGO_SENADOR,
+            },
+            {
+                "id": "dep_federal",
+                "label": "Deputados Federais",
+                "singular": "Deputado Federal",
+                "requires_uf": True,
+                "cargo": CARGO_DEP_FEDERAL,
+            },
+            {
+                "id": "dep_estadual",
+                "label": "Deputados Estaduais",
+                "singular": "Deputado Estadual",
+                "requires_uf": True,
+                "cargo": CARGO_DEP_ESTADUAL,
+                "uf_labels": {"df": "Deputado Distrital"},
+            },
+        ]
+    )
+    return categories

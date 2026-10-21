@@ -20,6 +20,7 @@ from extras.tse_client import (
     REGIAO_ORDER,
     panel_title,
     resolve_panel,
+    normalize_turno,
 )
 
 MOCK_ENABLED = os.environ.get("TSELIVESCORE_MOCK", "").lower() in ("1", "true", "yes")
@@ -270,10 +271,11 @@ def _calc_distancia(
 
 
 def fetch_mock_panel(
-    panel_key: str, prev_entry: dict | None, mock_tick: int = 1
+    panel_key: str, prev_entry: dict | None,     mock_tick: int = 1, turno: int = 1
 ) -> dict:
     panel_key, uf, cargo = resolve_panel(panel_key)
-    title = panel_title(uf, cargo)
+    turno = normalize_turno(turno)
+    title = panel_title(uf, cargo, turno)
     scenario = _scenario(panel_key)
 
     with _lock:
@@ -402,9 +404,10 @@ def fetch_mock_panel(
                     cargo,
                     qtd_vagas,
                     vv if perc_apurado > 0 else 0,
+                    turno,
                 )
-                apply_mat_def(candidatos, mat_def, cargo, qtd_vagas)
-                if cargo in CARGOS_SEGUNDO_TURNO:
+                apply_mat_def(candidatos, mat_def, cargo, qtd_vagas, turno)
+                if cargo in CARGOS_SEGUNDO_TURNO and turno != 2:
                     apply_garantido_segundo_turno(
                         candidatos, aprox_votos_restantes, mat_def or ""
                     )
@@ -416,11 +419,11 @@ def fetch_mock_panel(
                     qtd_vagas,
                     aprox_votos_restantes,
                     majoritario,
-                    cargo in CARGOS_SEGUNDO_TURNO,
+                    cargo in CARGOS_SEGUNDO_TURNO and turno != 2,
                     mat_def or "",
                 )
 
-        segundo_turno = cargo in CARGOS_SEGUNDO_TURNO
+        segundo_turno = cargo in CARGOS_SEGUNDO_TURNO and turno != 2
         maioria_1t = None
         if majoritario and segundo_turno and perc_apurado > 0:
             maioria_1t = calc_maioria_1t(
@@ -452,6 +455,7 @@ def fetch_mock_panel(
             "apuracao_iniciada": perc_apurado > 0,
             "mat_def": mat_def,
             "mat_def_label": mat_def_label,
+            "turno": turno,
             "majoritario": majoritario,
             "proporcional": proporcional,
             "segundo_turno": segundo_turno,

@@ -4,7 +4,7 @@ import os
 from time import sleep
 
 from extras.eleicao import EleicaoStats, fetch_eleicao_stats, format_duration
-from extras.tse_client import build_url, normalize_panel_key
+from extras.tse_client import build_url, default_turno, normalize_panel_key, normalize_turno
 
 
 def format_cli(stats: EleicaoStats, qtd_printable: int) -> str:
@@ -69,11 +69,13 @@ class Eleicao:
         panel_key: str,
         wait_time: int,
         qtd_printable: int,
+        turno: int = 2,
     ):
         self.title = title
         self.panel_key = panel_key
         self.wait_time = max(wait_time, 5)
         self.qtd_printable = qtd_printable
+        self.turno = normalize_turno(turno)
         self.eleicao_stats = None
         self.verificador()
 
@@ -84,7 +86,7 @@ class Eleicao:
 
     def update_eleicao(self):
         stats, error = fetch_eleicao_stats(
-            self.eleicao_stats, self.panel_key, self.qtd_printable
+            self.eleicao_stats, self.panel_key, self.qtd_printable, turno=self.turno
         )
         if error:
             print(self.eleicao_stats)
@@ -114,8 +116,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--printables", default=5, help="Quantidade de candidatos a exibir.", type=int
     )
+    parser.add_argument(
+        "--turno",
+        default=default_turno(),
+        help="Turno da eleição (1 ou 2). Padrão: 2.",
+        type=int,
+        choices=(1, 2),
+    )
     args = parser.parse_args()
     panel_key = normalize_panel_key(args.cod.lower())
-    titulo, _, _ = build_url(panel_key)
+    turno = normalize_turno(args.turno)
+    titulo, _, _ = build_url(panel_key, turno)
     print(f"Iniciando no modo '{titulo}'...")
-    Eleicao(titulo, panel_key, args.wait, args.printables)
+    Eleicao(titulo, panel_key, args.wait, args.printables, turno)

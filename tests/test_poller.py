@@ -54,7 +54,7 @@ class TestPollerSnapshot(unittest.TestCase):
             "legendas_resumo": [],
         }
         entry["_rev"] = entry_fingerprint(entry)
-        poller._state.cache["br:1"] = entry
+        poller._state.cache[panel.cache_key()] = entry
 
         full, _ = poller._snapshot_for([panel])
         self.assertIn("br:1", full)
@@ -84,7 +84,7 @@ class TestPollerSnapshot(unittest.TestCase):
             "legendas_resumo": [],
         }
         entry["_rev"] = entry_fingerprint(entry)
-        poller._state.cache["br:1"] = entry
+        poller._state.cache[panel.cache_key()] = entry
         poller._state.last_tse_poll_at = time.time()
 
         poll_calls = []
