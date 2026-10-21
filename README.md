@@ -11,6 +11,21 @@ docker compose up --build                              # desenvolvimento local (
 docker compose --profile prod up --build tselivescore-prod  # produção (imagem fixa, sem porta exposta)
 ```
 
+Ajustes só da sua máquina (rede do Cloudflare Tunnel, volume extra, etc.) vão em `docker-compose.override.yml` no mesmo diretório — o Compose mescla esse arquivo sozinho e ele está no `.gitignore`. Exemplo para o serviço de produção numa rede externa já criada:
+
+```yaml
+services:
+  tselivescore-prod:
+    volumes:
+      - ./src:/app/src
+    networks:
+      - cf-tunnel-net
+
+networks:
+  cf-tunnel-net:
+    external: true
+```
+
 Abra [http://localhost:8080](http://localhost:8080).
 
 - Adicione quantos painéis quiser: Presidência e governadores no 2º turno (padrão); 1º turno inclui também senadores e deputados

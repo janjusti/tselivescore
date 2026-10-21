@@ -1,3 +1,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Overlay local do Compose (rede Cloudflare, etc.). Ver README.
+docker-compose.override.yml
+compose.override.yml
