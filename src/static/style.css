@@ -1467,6 +1467,35 @@ body.tv-mode .event-log {
   }
 }
 
+@media (max-width: 900px) {
+  html {
+    height: auto;
+    min-height: 100%;
+    min-height: 100svh;
+  }
+
+  body {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-shell {
+    flex: none;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .dashboard {
+    overflow: visible;
+    min-height: auto;
+    overscroll-behavior-y: auto;
+  }
+}
+
 @media (max-width: 640px) {
   .panel {
     flex-basis: 100%;
