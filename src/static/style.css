@@ -1431,6 +1431,26 @@ body.tv-mode .apuracao-label {
   font-size: 1rem;
 }
 
+body.tv-mode .panel-stats {
+  width: 100%;
+}
+
+body.tv-mode .panel-stat-regioes {
+  width: 100%;
+  font-size: 1rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text) 90%, var(--muted));
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+body.tv-mode .panel-regiao-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
+
 body.tv-mode .panel-alert {
   font-size: 1.05rem;
 }
