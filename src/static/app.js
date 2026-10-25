@@ -141,147 +141,6 @@ function setTvMode(enabled) {
   localStorage.setItem(TV_MODE_KEY, enabled ? "1" : "0");
   document.body.classList.toggle("tv-mode", enabled);
   updateTvToggleUI();
-  scheduleFitTvDashboard();
-}
-
-function tvLayoutEnabled() {
-  return isTvMode() && window.matchMedia("(min-width: 901px)").matches;
-}
-
-function clearTvLayout() {
-  document.body.style.removeProperty("--tv-data-px");
-  document.body.style.removeProperty("--tv-ui-px");
-  dashboardEl?.style.removeProperty("--tv-cols");
-  dashboardEl?.style.removeProperty("--tv-rows");
-  dashboardEl?.classList.remove("tv-layout-pres");
-}
-
-const TV_DATA_MIN_PX = 10.5;
-const TV_DATA_MAX_PX = 13.25;
-
-function applyTvFontSizes(dataPx) {
-  const data = Math.min(TV_DATA_MAX_PX, Math.max(TV_DATA_MIN_PX, dataPx));
-  const ui = Math.max(11.75, Math.min(14.5, data * 1.06 + 1.15));
-  document.body.style.setProperty("--tv-data-px", `${data.toFixed(2)}px`);
-  document.body.style.setProperty("--tv-ui-px", `${ui.toFixed(2)}px`);
-}
-
-function estimateTvDataFontPx(cellHeight, isPresidency = false) {
-  const panel = dashboardEl.querySelector(
-    isPresidency ? '[data-panel-key="br:1"]' : ".panel",
-  );
-  const bodyRows = panel?.querySelectorAll(".candidates tbody tr").length || 2;
-  const tableRows = bodyRows + 1;
-  const chromePx = isPresidency ? 88 : 72;
-  const tableHeight = Math.max(48, cellHeight - chromePx);
-  const perRow = tableHeight / tableRows;
-  const target = perRow * (isPresidency ? 0.34 : 0.36);
-  const maxPx = isPresidency ? TV_DATA_MAX_PX + 1.25 : TV_DATA_MAX_PX;
-  return Math.min(maxPx, Math.max(TV_DATA_MIN_PX, target));
-}
-
-function pickTvGrid(panelCount, width, height, gap) {
-  let best = { cols: 1, rows: panelCount, score: -Infinity };
-  for (let cols = 1; cols <= panelCount; cols++) {
-    const rows = Math.ceil(panelCount / cols);
-    const cellW = (width - gap * (cols - 1)) / cols;
-    const cellH = (height - gap * (rows - 1)) / rows;
-    const wasted = cols * rows - panelCount;
-    const score = Math.min(cellW, cellH) - wasted * Math.min(cellW, cellH) * 0.12;
-    if (score > best.score) best = { cols, rows, score };
-  }
-  return { cols: best.cols, rows: Math.ceil(panelCount / best.cols) };
-}
-
-function tvLayoutFits() {
-  if (dashboardEl.scrollWidth > dashboardEl.clientWidth + 1) return false;
-  if (dashboardEl.scrollHeight > dashboardEl.clientHeight + 1) return false;
-  for (const panel of dashboardEl.querySelectorAll(".panel")) {
-    if (panel.scrollWidth > panel.clientWidth + 1) return false;
-    if (panel.scrollHeight > panel.clientHeight + 1) return false;
-  }
-  return true;
-}
-
-function fitTvFontForHeight(cellHeight, isPresidency) {
-  let target = estimateTvDataFontPx(cellHeight, isPresidency);
-  applyTvFontSizes(target);
-  if (tvLayoutFits()) return;
-
-  let lo = TV_DATA_MIN_PX;
-  let hi = target;
-  let best = lo;
-  for (let i = 0; i < 12; i++) {
-    const mid = (lo + hi) / 2;
-    applyTvFontSizes(mid);
-    if (tvLayoutFits()) {
-      best = mid;
-      lo = mid;
-    } else {
-      hi = mid;
-    }
-  }
-  applyTvFontSizes(best);
-}
-
-function fitTvDashboard() {
-  if (!dashboardEl) return;
-  if (!tvLayoutEnabled()) {
-    clearTvLayout();
-    return;
-  }
-
-  const panelNodes = dashboardEl.querySelectorAll(".panel");
-  const count = panelNodes.length;
-  if (!count) {
-    clearTvLayout();
-    return;
-  }
-
-  const dashStyle = getComputedStyle(dashboardEl);
-  const gap =
-    parseFloat(dashStyle.rowGap) || parseFloat(dashStyle.gap) || 16;
-  const padX =
-    parseFloat(dashStyle.paddingLeft) + parseFloat(dashStyle.paddingRight);
-  const padY =
-    parseFloat(dashStyle.paddingTop) + parseFloat(dashStyle.paddingBottom);
-  const innerW = dashboardEl.clientWidth - padX;
-  const innerH = dashboardEl.clientHeight - padY;
-  if (innerW <= 0 || innerH <= 0) return;
-
-  const presPanel = dashboardEl.querySelector('[data-panel-key="br:1"]');
-  dashboardEl.classList.toggle("tv-layout-pres", Boolean(presPanel));
-
-  if (presPanel) {
-    dashboardEl.style.removeProperty("--tv-cols");
-    dashboardEl.style.removeProperty("--tv-rows");
-    const govCellH = (innerH - gap * 2) / 3;
-    fitTvFontForHeight(govCellH, false);
-    return;
-  }
-
-  const grid = pickTvGrid(count, innerW, innerH, gap);
-  dashboardEl.style.setProperty("--tv-cols", String(grid.cols));
-  dashboardEl.style.setProperty("--tv-rows", String(grid.rows));
-  const cellH = (innerH - gap * (grid.rows - 1)) / grid.rows;
-  fitTvFontForHeight(cellH, false);
-}
-
-let tvFitRaf = 0;
-function scheduleFitTvDashboard() {
-  if (tvFitRaf) cancelAnimationFrame(tvFitRaf);
-  tvFitRaf = requestAnimationFrame(() => {
-    tvFitRaf = 0;
-    fitTvDashboard();
-  });
-}
-
-let tvFitObserver;
-function observeTvLayout() {
-  const shell = document.querySelector(".app-shell");
-  if (!shell || tvFitObserver) return;
-  tvFitObserver = new ResizeObserver(() => scheduleFitTvDashboard());
-  tvFitObserver.observe(shell);
 }
 
 function updateTvToggleUI() {
@@ -1373,7 +1232,6 @@ function renderPanels() {
   for (const panel of panels) {
     const node = panelTemplate.content.firstElementChild.cloneNode(true);
     node.dataset.id = panel.id;
-    node.dataset.panelKey = panel.key;
     node.querySelector(".panel-title").textContent = panelLabel(panel.key);
     node.querySelector(".panel-printables").value = panel.printables;
     node.querySelector(".panel-remove").addEventListener("click", () => {
@@ -1409,7 +1267,6 @@ function renderPanels() {
   }
   updatePanelPriorityButtons();
   observeColumnFitting();
-  scheduleFitTvDashboard();
 }
 
 function formatNumber(value) {
@@ -1925,7 +1782,7 @@ function renderPanelStats(statsEl, data, pct, isProporcional) {
   const restantes = Number(data.aprox_votos_restantes) || 0;
   if (pct < 100 && restantes > 0) {
     const row = document.createElement("div");
-    row.className = "panel-stat-line panel-stat-restantes";
+    row.className = "panel-stat-line";
     row.textContent = `Restantes: ~${formatCompact(restantes)}`;
     statsEl.appendChild(row);
   }
@@ -1934,7 +1791,7 @@ function renderPanelStats(statsEl, data, pct, isProporcional) {
 
   if (data.mock && data.mock_tick != null) {
     const row = document.createElement("div");
-    row.className = "panel-stat-line panel-stat-mock";
+    row.className = "panel-stat-line";
     row.textContent = `roteiro #${data.mock_tick}`;
     statsEl.appendChild(row);
   }
@@ -2303,7 +2160,6 @@ function renderPanelData(panelEl, data, panelKey = "") {
     tbody.appendChild(tr);
   });
   scheduleFitCandidateColumns(panelEl);
-  scheduleFitTvDashboard();
 }
 
 function updateRollingPercHistory(panelsData) {
@@ -2459,7 +2315,6 @@ async function init() {
   scheduleHeartbeat();
   scheduleFreshnessRefresh();
   observeColumnFitting();
-  observeTvLayout();
 }
 
 const legendDialog = document.getElementById("legend-dialog");
@@ -2533,8 +2388,6 @@ audioToggle?.addEventListener("click", () => {
 tvToggle?.addEventListener("click", () => {
   setTvMode(!isTvMode());
 });
-
-window.addEventListener("resize", () => scheduleFitTvDashboard());
 
 window.addEventListener("pagehide", endSession);
 
