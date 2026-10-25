@@ -1440,6 +1440,65 @@ body.tv-mode .candidates td {
   padding: 0.55rem 0.45rem;
 }
 
+body.tv-mode .candidates col.col-pct {
+  width: 4.75rem;
+}
+
+body.tv-mode .candidates col.col-delta {
+  width: 5.5rem;
+}
+
+body.tv-mode .candidates.layout-maj col.col-name {
+  width: 32%;
+}
+
+body.tv-mode .candidates.layout-maj col.col-num {
+  width: 14%;
+}
+
+body.tv-mode .candidates.layout-maj col.col-pct {
+  width: 17%;
+}
+
+body.tv-mode .candidates.layout-maj col.col-delta {
+  width: 17%;
+}
+
+body.tv-mode .candidates.layout-maj col.col-dist {
+  width: 20%;
+}
+
+body.tv-mode .candidates.layout-prop col.col-name {
+  width: 39%;
+}
+
+body.tv-mode .candidates.layout-prop col.col-pct {
+  width: 13%;
+}
+
+body.tv-mode .candidates.layout-prop col.col-delta {
+  width: 15%;
+}
+
+body.tv-mode .candidates.layout-maj .col-pct {
+  min-width: 4.5rem;
+  padding-right: 0.35rem;
+}
+
+body.tv-mode .candidates.layout-maj .col-delta {
+  min-width: 4.75rem;
+  padding-left: 0.25rem;
+}
+
+body.tv-mode .candidates .col-num,
+body.tv-mode .candidates .col-pct,
+body.tv-mode .candidates .col-delta,
+body.tv-mode .candidates .col-dist,
+body.tv-mode .candidates .col-margem {
+  padding-left: 0.3rem;
+  padding-right: 0.3rem;
+}
+
 body.tv-mode .cand-name > span:first-child {
   font-size: 1.05em;
 }
