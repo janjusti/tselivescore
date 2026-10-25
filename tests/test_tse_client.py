@@ -17,22 +17,34 @@ from extras.tse_client import (
 )
 
 
-def _uf_abr(uf: str, st: int, ts: int) -> dict:
-    return {"tpabr": "uf", "cdabr": uf, "s": {"st": str(st), "ts": str(ts)}}
+def _uf_abr(uf: str, st: int, ts: int, te: int = 0, est: int = 0) -> dict:
+    entry = {"tpabr": "uf", "cdabr": uf, "s": {"st": str(st), "ts": str(ts)}}
+    if te > 0:
+        entry["e"] = {"te": str(te), "est": str(est), "esnt": str(te - est)}
+    return entry
 
 
 class TestApuracaoPorRegiao(unittest.TestCase):
     def test_agrega_por_secoes_ponderadas(self):
         payload = {
             "abr": [
-                _uf_abr("sp", 80, 100),
-                _uf_abr("rj", 50, 100),
-                _uf_abr("ac", 90, 100),
+                _uf_abr("sp", 80, 100, te=1000, est=800),
+                _uf_abr("rj", 50, 100, te=500, est=200),
+                _uf_abr("ac", 90, 100, te=100, est=90),
             ]
         }
         rows = {row["id"]: row for row in apuracao_por_regiao(payload)}
         self.assertAlmostEqual(rows["sudeste"]["perc_apurado"], 65.0)
         self.assertAlmostEqual(rows["norte"]["perc_apurado"], 90.0)
+        self.assertAlmostEqual(rows["sudeste"]["perc_eleitores"], 66.67, places=1)
+        self.assertAlmostEqual(rows["sudeste"]["peso_pendente_nacional"], 98.0, places=0)
+
+    def test_eleitores_sem_bloco_e_mantem_secoes(self):
+        payload = {"abr": [_uf_abr("ac", 10, 100)]}
+        rows = apuracao_por_regiao(payload)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["perc_apurado"], 10.0)
+        self.assertNotIn("perc_eleitores", rows[0])
 
     def test_inclui_exterior_quando_zz_presente(self):
         payload = {"abr": [_uf_abr("zz", 60, 100)]}

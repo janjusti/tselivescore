@@ -56,6 +56,16 @@ def _perc_apurado(mock_tick: int) -> float:
     return min(100.0, (mock_tick - 1) * _APURACAO_STEP)
 
 
+_MOCK_ELEITORES_REGIAO = {
+    "norte": 5_200_000,
+    "nordeste": 16_800_000,
+    "centro-oeste": 6_100_000,
+    "sudeste": 34_500_000,
+    "sul": 9_400_000,
+    "exterior": 450_000,
+}
+
+
 def _apuracao_regioes_mock(perc_apurado: float) -> list[dict]:
     if perc_apurado <= 0:
         return []
@@ -68,15 +78,29 @@ def _apuracao_regioes_mock(perc_apurado: float) -> list[dict]:
         "exterior": -18,
     }
     rows = []
+    pending = []
     for reg_id in REGIAO_ORDER:
-        perc = max(0.0, min(100.0, perc_apurado + offsets.get(reg_id, 0)))
-        rows.append(
-            {
-                "id": reg_id,
-                "label": REGIAO_LABELS[reg_id],
-                "perc_apurado": round(perc, 2),
-            }
-        )
+        te = _MOCK_ELEITORES_REGIAO.get(reg_id, 0)
+        perc_sec = max(0.0, min(100.0, perc_apurado + offsets.get(reg_id, 0)))
+        perc_eleit = max(0.0, min(100.0, perc_apurado + offsets.get(reg_id, 0) * 0.85))
+        est = int(te * perc_eleit / 100) if te else 0
+        esnt = max(0, te - est) if te else 0
+        row = {
+            "id": reg_id,
+            "label": REGIAO_LABELS[reg_id],
+            "perc_apurado": round(perc_sec, 2),
+        }
+        if te > 0:
+            row["perc_eleitores"] = round(perc_eleit, 2)
+            row["esnt"] = esnt
+            pending.append(esnt)
+        rows.append(row)
+    nacional_esnt = sum(pending)
+    if nacional_esnt > 0:
+        for row in rows:
+            esnt = row.get("esnt") or 0
+            if esnt > 0:
+                row["peso_pendente_nacional"] = round(esnt * 100 / nacional_esnt, 1)
     return rows
 
 

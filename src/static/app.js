@@ -1753,19 +1753,38 @@ const REGIAO_SHORT = {
   exterior: "Ext",
 };
 
+function formatRegiaoLine(item) {
+  const short = REGIAO_SHORT[item.id] || item.label;
+  const sec = Number(item.perc_apurado);
+  const eleit = Number(item.perc_eleitores);
+  const peso = Number(item.peso_pendente_nacional);
+
+  const parts = [`${short}`];
+  if (Number.isFinite(eleit)) {
+    parts.push(`${eleit.toFixed(0)}% eleit.`);
+  } else if (Number.isFinite(sec)) {
+    parts.push(`${sec.toFixed(0)}% apurado`);
+  }
+  if (Number.isFinite(peso) && peso > 0) {
+    parts.push(`pend. ${peso.toFixed(0)}% BR`);
+  }
+  return parts.join(" · ");
+}
+
 function appendApuracaoRegioes(statsEl, regioes) {
   if (!regioes?.length) return;
   const row = document.createElement("div");
   row.className = "panel-stat-line panel-stat-regioes";
-  row.title = "Apuração por região (% de seções totalizadas)";
+
+  const list = document.createElement("ul");
+  list.className = "panel-regiao-list";
   for (const item of regioes) {
-    const chip = document.createElement("span");
-    chip.className = "panel-regiao-chip";
-    const short = REGIAO_SHORT[item.id] || item.label;
-    const pct = Number(item.perc_apurado);
-    chip.textContent = Number.isFinite(pct) ? `${short} ${pct.toFixed(0)}%` : short;
-    row.appendChild(chip);
+    const li = document.createElement("li");
+    li.className = "panel-regiao-item";
+    li.textContent = formatRegiaoLine(item);
+    list.appendChild(li);
   }
+  row.appendChild(list);
   statsEl.appendChild(row);
 }
 

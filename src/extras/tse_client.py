@@ -272,49 +272,84 @@ def _sec_counts(ab_entry: dict) -> tuple[int, int]:
     return done, total
 
 
+def _elector_counts(ab_entry: dict) -> tuple[int, int, int]:
+    e = ab_entry.get("e") or {}
+    te = int(parse_tse_num(e.get("te")) or 0)
+    est = int(parse_tse_num(e.get("est")) or 0)
+    esnt = int(parse_tse_num(e.get("esnt")) or 0)
+    if te > 0 and esnt <= 0:
+        esnt = max(0, te - est)
+    return te, est, esnt
+
+
 def apuracao_por_regiao(ab_payload: dict | None) -> list[dict]:
-    """Agrega % de seções totalizadas (EA14) por macro-região do Brasil."""
+    """Agrega apuração por macro-região (seções EA14 e eleitores do acompanhamento)."""
     if not ab_payload:
         return []
 
-    by_uf: dict[str, tuple[int, int]] = {}
+    by_uf: dict[str, dict] = {}
     for abr in ab_payload.get("abr") or []:
         if (abr.get("tpabr") or "").lower() != "uf":
             continue
         uf = (abr.get("cdabr") or "").lower()
         if not uf:
             continue
-        by_uf[uf] = _sec_counts(abr)
+        sec_done, sec_total = _sec_counts(abr)
+        te, est, esnt = _elector_counts(abr)
+        by_uf[uf] = {
+            "sec_done": sec_done,
+            "sec_total": sec_total,
+            "te": te,
+            "est": est,
+            "esnt": esnt,
+        }
 
-    totals = {reg: [0, 0] for reg in REGIOES_BR}
-    exterior = [0, 0]
+    sec_totals = {reg: [0, 0] for reg in REGIOES_BR}
+    sec_exterior = [0, 0]
+    ele_totals = {reg: [0, 0, 0] for reg in REGIOES_BR}
+    ele_exterior = [0, 0, 0]
 
-    for uf, (done, total) in by_uf.items():
+    for uf, counts in by_uf.items():
         if uf == "zz":
-            exterior[0] += done
-            exterior[1] += total
+            sec_exterior[0] += counts["sec_done"]
+            sec_exterior[1] += counts["sec_total"]
+            ele_exterior[0] += counts["te"]
+            ele_exterior[1] += counts["est"]
+            ele_exterior[2] += counts["esnt"]
             continue
         regiao = UF_TO_REGIAO.get(uf)
         if not regiao:
             continue
-        totals[regiao][0] += done
-        totals[regiao][1] += total
+        sec_totals[regiao][0] += counts["sec_done"]
+        sec_totals[regiao][1] += counts["sec_total"]
+        ele_totals[regiao][0] += counts["te"]
+        ele_totals[regiao][1] += counts["est"]
+        ele_totals[regiao][2] += counts["esnt"]
+
+    nacional_esnt = sum(v[2] for v in ele_totals.values()) + ele_exterior[2]
 
     rows = []
     for reg_id in REGIAO_ORDER:
         if reg_id == "exterior":
-            done, total = exterior
+            sec_done, sec_total = sec_exterior
+            te, est, esnt = ele_exterior
         else:
-            done, total = totals[reg_id]
-        if total <= 0:
+            sec_done, sec_total = sec_totals[reg_id]
+            te, est, esnt = ele_totals[reg_id]
+        if sec_total <= 0 and te <= 0:
             continue
-        rows.append(
-            {
-                "id": reg_id,
-                "label": REGIAO_LABELS[reg_id],
-                "perc_apurado": round(done * 100 / total, 2),
-            }
-        )
+        row = {
+            "id": reg_id,
+            "label": REGIAO_LABELS[reg_id],
+        }
+        if sec_total > 0:
+            row["perc_apurado"] = round(sec_done * 100 / sec_total, 2)
+        if te > 0:
+            row["perc_eleitores"] = round(est * 100 / te, 2)
+            row["esnt"] = esnt
+            if nacional_esnt > 0 and esnt > 0:
+                row["peso_pendente_nacional"] = round(esnt * 100 / nacional_esnt, 1)
+        rows.append(row)
     return rows
 
 

@@ -693,12 +693,35 @@ button:hover {
 
 .panel-stat-regioes {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.15rem 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
   font-size: 0.72rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.panel-regiao-legend {
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.panel-regiao-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem 0.65rem;
+}
+
+.panel-regiao-item {
+  min-width: 0;
+  line-height: 1.35;
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .panel-regiao-chip {
@@ -1437,18 +1460,22 @@ body.tv-mode .panel-stats {
 
 body.tv-mode .panel-stat-regioes {
   width: 100%;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.95rem;
   color: color-mix(in srgb, var(--text) 90%, var(--muted));
-  flex-wrap: nowrap;
-  justify-content: space-between;
-  gap: 0.35rem;
 }
 
-body.tv-mode .panel-regiao-chip {
-  flex: 1 1 0;
-  min-width: 0;
-  text-align: center;
+body.tv-mode .panel-regiao-legend {
+  font-size: 0.72em;
+}
+
+body.tv-mode .panel-regiao-list {
+  grid-template-columns: 1fr;
+  gap: 0.22rem;
+}
+
+body.tv-mode .panel-regiao-item {
+  font-size: 1.02em;
+  font-weight: 600;
 }
 
 body.tv-mode .panel-alert {
